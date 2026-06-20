@@ -1,0 +1,70 @@
+:root {
+  --bg: #0f1115;
+  --surface: #171a21;
+  --border: #262b36;
+  --text: #e6e8eb;
+  --text-muted: #9aa3b2;
+  --accent: #6ea8fe;
+
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background-color: var(--bg);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.app__title {
+  margin: 0;
+  font-size: 3.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(120deg, var(--accent), #b78cff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.app__tagline {
+  margin: 0.5rem 0 0;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+}
+
+.app__body {
+  max-width: 28rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.app__hint {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
