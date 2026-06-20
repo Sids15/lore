@@ -1,0 +1,53 @@
+# ───────────────────────────── Node / Frontend (Vite) ─────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# ───────────────────────────── Environment / secrets ─────────────────────────────
+# Only *.example files are committed; real env files stay local.
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# ───────────────────────────── Rust / Tauri ─────────────────────────────
+src-tauri/target/
+target/
+**/*.rs.bk
+*.pdb
+
+# ───────────────────────────── Python (sidecar) ─────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist-py/
+
+# ───────────────────────────── Runtime data (databases / indexes) ─────────────────────────────
+# Lore's embedded stores are generated at runtime and must never be committed.
+data/
+.data/
+*.sqlite
+*.sqlite3
+*.lancedb/
+**/lancedb/
+
+# ───────────────────────────── Logs ─────────────────────────────
+*.log
+logs/
+
+# ───────────────────────────── Editors / OS ─────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
