@@ -1,8 +1,8 @@
 """Health endpoint.
 
-Reports a liveness signal plus the readiness of the embedded data stores so the
-frontend can show an accurate system-status panel. Ollama readiness is added in
-a later feature.
+Reports a liveness signal plus the readiness of the embedded data stores and the
+Ollama runtime, so the frontend can show an accurate system-status panel and tell
+the user exactly what (if anything) needs fixing.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.db import lancedb_client, sqlite_store
+from app.llm import ollama_client
+from app.llm.ollama_client import OllamaStatus
 
 router = APIRouter(tags=["health"])
 
@@ -30,11 +32,12 @@ class HealthResponse(BaseModel):
     service: str
     version: str
     databases: DatabasesHealth
+    ollama: OllamaStatus
 
 
 @router.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
-    """Report sidecar liveness and data-store readiness."""
+async def health() -> HealthResponse:
+    """Report sidecar liveness, data-store readiness, and Ollama status."""
     settings = get_settings()
     data_path = settings.data_path
 
@@ -42,11 +45,23 @@ def health() -> HealthResponse:
         sqlite=sqlite_store.is_ready(data_path),
         lancedb=lancedb_client.is_ready(data_path),
     )
-    status = "ok" if (databases.sqlite and databases.lancedb) else "degraded"
+
+    ollama = await ollama_client.check(
+        settings.ollama_url,
+        required_models=[settings.generation_model, settings.embedding_model],
+    )
+
+    healthy = (
+        databases.sqlite
+        and databases.lancedb
+        and ollama.reachable
+        and not ollama.missing_models
+    )
 
     return HealthResponse(
-        status=status,
+        status="ok" if healthy else "degraded",
         service=settings.app_name,
         version=settings.version,
         databases=databases,
+        ollama=ollama,
     )

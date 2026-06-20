@@ -11,11 +11,12 @@ type SidecarStatus =
   | { kind: "disconnected"; message: string };
 
 /**
- * Shows the live connection status of the Python sidecar.
+ * Shows the live status of the backend: the sidecar connection, the embedded
+ * databases, and the Ollama runtime (including guidance when a model needs to
+ * be pulled).
  *
- * Polls `/health` on an interval and reflects the result with a colored
- * indicator. The Tauri shell starts the sidecar automatically, so this normally
- * transitions from "Connecting" to "Connected" within a second or two.
+ * Polls `/health` on an interval. The Tauri shell starts the sidecar
+ * automatically, so this normally reaches "connected" within a second or two.
  */
 export function StatusPanel() {
   const [status, setStatus] = useState<SidecarStatus>({ kind: "loading" });
@@ -51,21 +52,59 @@ export function StatusPanel() {
 
   return (
     <div className="status">
-      <span className={`status__dot status__dot--${status.kind}`} aria-hidden />
-      <span className="status__label">{describe(status)}</span>
+      <div className="status__pill">
+        <span className={`status__dot status__dot--${pillTone(status)}`} aria-hidden />
+        <span className="status__label">{pillLabel(status)}</span>
+      </div>
+      {status.kind === "connected" && <StatusDetails health={status.health} />}
     </div>
   );
 }
 
-function describe(status: SidecarStatus): string {
+/** Detail rows shown once the sidecar is connected. */
+function StatusDetails({ health }: { health: HealthResponse }) {
+  const dbReady = health.databases.sqlite && health.databases.lancedb;
+  const ollama = health.ollama;
+
+  return (
+    <ul className="status__details">
+      <li className={dbReady ? "is-ok" : "is-warn"}>
+        Databases: {dbReady ? "ready" : "initializing"}
+      </li>
+      <li className={ollama.reachable && ollama.missing_models.length === 0 ? "is-ok" : "is-warn"}>
+        Ollama: {ollamaSummary(health)}
+      </li>
+      {ollama.reachable &&
+        ollama.missing_models.map((model) => (
+          <li key={model} className="status__hint">
+            Pull model: <code>ollama pull {model}</code>
+          </li>
+        ))}
+    </ul>
+  );
+}
+
+function ollamaSummary(health: HealthResponse): string {
+  const { reachable, installed_models, missing_models } = health.ollama;
+  if (!reachable) {
+    return "not running — start Ollama";
+  }
+  if (missing_models.length > 0) {
+    return `running, ${missing_models.length} model(s) missing`;
+  }
+  return `ready (${installed_models.length} model(s))`;
+}
+
+function pillTone(status: SidecarStatus): "loading" | "connected" | "disconnected" {
+  return status.kind;
+}
+
+function pillLabel(status: SidecarStatus): string {
   switch (status.kind) {
     case "loading":
       return "Connecting to sidecar…";
-    case "connected": {
-      const { service, version, databases } = status.health;
-      const dbs = `DBs ${databases.sqlite && databases.lancedb ? "ready" : "initializing"}`;
-      return `Sidecar connected — ${service} v${version} · ${dbs}`;
-    }
+    case "connected":
+      return `Sidecar connected — ${status.health.service} v${status.health.version}`;
     case "disconnected":
       return `Sidecar disconnected (${status.message})`;
   }

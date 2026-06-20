@@ -18,12 +18,21 @@ export interface DatabasesHealth {
   lancedb: boolean;
 }
 
+/** Status of the local Ollama runtime. */
+export interface OllamaHealth {
+  reachable: boolean;
+  installed_models: string[];
+  missing_models: string[];
+  error?: string | null;
+}
+
 /** Response shape of the sidecar `/health` endpoint. */
 export interface HealthResponse {
   status: string;
   service: string;
   version: string;
   databases: DatabasesHealth;
+  ollama: OllamaHealth;
 }
 
 /**
