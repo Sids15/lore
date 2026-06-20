@@ -61,8 +61,11 @@ function describe(status: SidecarStatus): string {
   switch (status.kind) {
     case "loading":
       return "Connecting to sidecar…";
-    case "connected":
-      return `Sidecar connected — ${status.health.service} v${status.health.version}`;
+    case "connected": {
+      const { service, version, databases } = status.health;
+      const dbs = `DBs ${databases.sqlite && databases.lancedb ? "ready" : "initializing"}`;
+      return `Sidecar connected — ${service} v${version} · ${dbs}`;
+    }
     case "disconnected":
       return `Sidecar disconnected (${status.message})`;
   }

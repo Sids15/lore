@@ -12,11 +12,18 @@ export const sidecarBaseUrl: string = (
   import.meta.env.VITE_SIDECAR_URL ?? DEFAULT_SIDECAR_URL
 ).replace(/\/$/, "");
 
+/** Readiness of each embedded data store. */
+export interface DatabasesHealth {
+  sqlite: boolean;
+  lancedb: boolean;
+}
+
 /** Response shape of the sidecar `/health` endpoint. */
 export interface HealthResponse {
   status: string;
   service: string;
   version: string;
+  databases: DatabasesHealth;
 }
 
 /**

@@ -1,8 +1,8 @@
 """Health endpoint.
 
-Phase 0 returns a simple liveness signal. Later features extend this to report
-the readiness of the embedded databases and the Ollama runtime, so the frontend
-can show an accurate system-status panel.
+Reports a liveness signal plus the readiness of the embedded data stores so the
+frontend can show an accurate system-status panel. Ollama readiness is added in
+a later feature.
 """
 
 from __future__ import annotations
@@ -11,8 +11,16 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.db import lancedb_client, sqlite_store
 
 router = APIRouter(tags=["health"])
+
+
+class DatabasesHealth(BaseModel):
+    """Readiness of each embedded store."""
+
+    sqlite: bool
+    lancedb: bool
 
 
 class HealthResponse(BaseModel):
@@ -21,14 +29,24 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     version: str
+    databases: DatabasesHealth
 
 
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    """Report that the sidecar process is up and reachable."""
+    """Report sidecar liveness and data-store readiness."""
     settings = get_settings()
+    data_path = settings.data_path
+
+    databases = DatabasesHealth(
+        sqlite=sqlite_store.is_ready(data_path),
+        lancedb=lancedb_client.is_ready(data_path),
+    )
+    status = "ok" if (databases.sqlite and databases.lancedb) else "degraded"
+
     return HealthResponse(
-        status="ok",
+        status=status,
         service=settings.app_name,
         version=settings.version,
+        databases=databases,
     )
