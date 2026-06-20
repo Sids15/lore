@@ -1,12 +1,12 @@
+import { IndexPanel } from "./components/IndexPanel";
 import { StatusPanel } from "./components/StatusPanel";
 import "./App.css";
 
 /**
  * Root component of the Lore frontend.
  *
- * Phase 0 renders a minimal branded landing screen plus a live sidecar status
- * indicator. Database and Ollama readiness are added to the panel in later
- * features.
+ * Renders the branded header, the live system-status panel, and the Code Index
+ * builder (choose a repository and index it). Q&A arrives in later phases.
  */
 function App() {
   return (
@@ -19,11 +19,8 @@ function App() {
       </header>
 
       <section className="app__body">
-        <p className="app__hint">
-          The desktop shell is running. Indexing and Q&amp;A arrive in upcoming
-          phases.
-        </p>
         <StatusPanel />
+        <IndexPanel />
       </section>
     </main>
   );

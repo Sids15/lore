@@ -48,3 +48,54 @@ export async function fetchHealth(signal?: AbortSignal): Promise<HealthResponse>
   }
   return (await response.json()) as HealthResponse;
 }
+
+/** Live status of a code-index ingestion run (mirrors the sidecar IndexJob). */
+export interface IndexJob {
+  state: "idle" | "running" | "done" | "error";
+  repo: string | null;
+  total: number;
+  processed: number;
+  errors: string[];
+  message: string | null;
+}
+
+/** Aggregate index counts. */
+export interface IndexStats {
+  code_chunks: number;
+}
+
+async function parseOrThrow<T>(response: Response, action: string): Promise<T> {
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      // response had no JSON body; keep the status-based detail.
+    }
+    throw new Error(`${action} failed: ${detail}`);
+  }
+  return (await response.json()) as T;
+}
+
+/** Start indexing the repository at the given path. */
+export async function startCodeIndex(path: string): Promise<IndexJob> {
+  const response = await fetch(`${sidecarBaseUrl}/index/code`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return parseOrThrow<IndexJob>(response, "Start indexing");
+}
+
+/** Fetch the current/last indexing job status. */
+export async function fetchIndexStatus(signal?: AbortSignal): Promise<IndexJob> {
+  const response = await fetch(`${sidecarBaseUrl}/index/status`, { signal });
+  return parseOrThrow<IndexJob>(response, "Fetch index status");
+}
+
+/** Fetch aggregate index counts. */
+export async function fetchIndexStats(signal?: AbortSignal): Promise<IndexStats> {
+  const response = await fetch(`${sidecarBaseUrl}/index/stats`, { signal });
+  return parseOrThrow<IndexStats>(response, "Fetch index stats");
+}

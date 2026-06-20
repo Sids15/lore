@@ -38,7 +38,9 @@ async def start_code_index(request: IndexRequest) -> IndexJob:
     if pipeline.is_running():
         raise HTTPException(status_code=409, detail="An indexing job is already running")
 
-    # Launch in the background; progress is observable via GET /index/status.
+    # Mark running synchronously so the response and any immediate poll/retry see
+    # the active job, then launch in the background (progress via GET /index/status).
+    pipeline.mark_running(repo_path.name)
     asyncio.create_task(pipeline.index_repo(repo_path))
     return pipeline.current_job()
 

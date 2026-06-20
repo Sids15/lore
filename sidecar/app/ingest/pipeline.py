@@ -49,6 +49,17 @@ def is_running() -> bool:
     return _job.state == "running"
 
 
+def mark_running(repo: str) -> IndexJob:
+    """Synchronously mark a job as running before its task is scheduled.
+
+    Closes the race where two requests could both start a job in the gap between
+    scheduling the task and the task actually beginning.
+    """
+    global _job
+    _job = IndexJob(state="running", repo=repo, message="Queued…")
+    return _job
+
+
 def _batches(items: list, size: int):
     for i in range(0, len(items), size):
         yield items[i : i + size]

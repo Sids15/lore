@@ -17,6 +17,7 @@ use tauri::RunEvent;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(SidecarProcess::default())
         .setup(|app| {
             // Start the backend as soon as the app is ready. A failure here is

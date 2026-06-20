@@ -56,17 +56,15 @@ body,
 }
 
 .app__body {
-  max-width: 28rem;
+  width: 100%;
+  max-width: 32rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
   padding: 1.5rem;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
-}
-
-.app__hint {
-  margin: 0 0 1.25rem;
-  color: var(--text-muted);
-  line-height: 1.5;
 }
 
 .status {
@@ -147,4 +145,106 @@ body,
   50% {
     opacity: 1;
   }
+}
+
+/* ───────────────────────────── Code Index panel ───────────────────────────── */
+
+.index {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
+}
+
+.index__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.index__row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.index__btn {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #1f2530;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.index__btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.index__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.index__btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b0d11;
+  font-weight: 600;
+}
+
+.index__path {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.index__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.index__bar {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #0b0d11;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.index__bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #b78cff);
+  transition: width 0.3s ease;
+}
+
+.index__status {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.index__errors {
+  margin: 0;
+  padding-left: 1rem;
+  font-size: 0.8rem;
+  color: #e0b341;
+}
+
+.index__error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #e5484d;
+}
+
+.index__count {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
 }
