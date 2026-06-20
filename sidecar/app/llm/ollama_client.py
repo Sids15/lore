@@ -7,8 +7,13 @@ phases that use them.
 
 from __future__ import annotations
 
+import re
+
 import httpx
 from pydantic import BaseModel
+
+# Defensive cleanup: some "thinking" models can emit <think>…</think> blocks.
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 class OllamaStatus(BaseModel):
@@ -67,3 +72,37 @@ async def check(
         installed_models=installed,
         missing_models=missing,
     )
+
+
+async def generate(
+    base_url: str,
+    model: str,
+    prompt: str,
+    *,
+    system: str | None = None,
+    timeout: float = 120.0,
+    think: bool = False,
+) -> str:
+    """Generate text from a prompt via Ollama's ``/api/generate`` endpoint.
+
+    ``think=False`` keeps reasoning models (e.g. qwen3) from interleaving their
+    chain-of-thought; any stray ``<think>`` block is stripped defensively.
+    Raises ``httpx.HTTPError`` on transport/HTTP failure so callers can decide
+    how to handle it.
+    """
+    url = f"{base_url.rstrip('/')}/api/generate"
+    payload: dict[str, object] = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "think": think,
+    }
+    if system:
+        payload["system"] = system
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(url, json=payload)
+        response.raise_for_status()
+        data = response.json()
+
+    return _THINK_BLOCK.sub("", data.get("response", "")).strip()
