@@ -1,10 +1,12 @@
+import { StatusPanel } from "./components/StatusPanel";
 import "./App.css";
 
 /**
  * Root component of the Lore frontend.
  *
- * Phase 0 renders a minimal branded landing screen. The system status panel
- * (sidecar / databases / Ollama health) is wired in a later feature.
+ * Phase 0 renders a minimal branded landing screen plus a live sidecar status
+ * indicator. Database and Ollama readiness are added to the panel in later
+ * features.
  */
 function App() {
   return (
@@ -21,6 +23,7 @@ function App() {
           The desktop shell is running. Indexing and Q&amp;A arrive in upcoming
           phases.
         </p>
+        <StatusPanel />
       </section>
     </main>
   );

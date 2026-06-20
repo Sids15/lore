@@ -64,7 +64,49 @@ body,
 }
 
 .app__hint {
-  margin: 0;
+  margin: 0 0 1.25rem;
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.status__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: none;
+}
+
+.status__dot--loading {
+  background: #e0b341;
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+.status__dot--connected {
+  background: #4caf50;
+}
+
+.status__dot--disconnected {
+  background: #e5484d;
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
