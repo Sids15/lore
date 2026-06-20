@@ -7,6 +7,7 @@ phases that use them.
 
 from __future__ import annotations
 
+import asyncio
 import re
 
 import httpx
@@ -106,3 +107,54 @@ async def generate(
         data = response.json()
 
     return _THINK_BLOCK.sub("", data.get("response", "")).strip()
+
+
+async def embed_batch(
+    base_url: str,
+    model: str,
+    texts: list[str],
+    *,
+    timeout: float = 120.0,
+) -> list[list[float]]:
+    """Embed a list of texts in a single Ollama ``/api/embed`` call."""
+    if not texts:
+        return []
+    url = f"{base_url.rstrip('/')}/api/embed"
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(url, json={"model": model, "input": texts})
+        response.raise_for_status()
+        data = response.json()
+    return data.get("embeddings", [])
+
+
+async def embed(base_url: str, model: str, text: str, *, timeout: float = 120.0) -> list[float]:
+    """Embed a single text and return its vector."""
+    vectors = await embed_batch(base_url, model, [text], timeout=timeout)
+    return vectors[0]
+
+
+async def embed_many(
+    base_url: str,
+    model: str,
+    texts: list[str],
+    *,
+    concurrency: int = 4,
+    batch_size: int = 16,
+    timeout: float = 120.0,
+) -> list[list[float]]:
+    """Embed many texts via concurrent, batched ``/api/embed`` calls.
+
+    Results are returned in the same order as ``texts``.
+    """
+    if not texts:
+        return []
+
+    batches = [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def run(batch: list[str]) -> list[list[float]]:
+        async with semaphore:
+            return await embed_batch(base_url, model, batch, timeout=timeout)
+
+    results = await asyncio.gather(*(run(batch) for batch in batches))
+    return [vector for batch in results for vector in batch]

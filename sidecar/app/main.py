@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health
+from app.api import health, index
 from app.config import get_settings
 from app.db import lancedb_client, sqlite_store
 
@@ -45,6 +45,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(index.router)
     return app
 
 
