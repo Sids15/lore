@@ -1,0 +1,4 @@
+# Development-only dependencies (tests, linting). Not shipped with the app.
+-r requirements.txt
+
+pytest>=8.0

@@ -51,6 +51,29 @@ class Settings(BaseSettings):
     embedding_model: str = "nomic-embed-text"
     reranker_model: str = "bge-reranker-base"
 
+    # --- Code Index ingestion (Phase 1) ---
+    # Contextual enrichment: prepend an LLM-written situating header per chunk.
+    # The PRD's highest-leverage quality feature; disable for faster indexing.
+    enrich_enabled: bool = True
+    enrich_concurrency: int = 4
+
+    # Embedding throughput and vector size (nomic-embed-text -> 768 dims).
+    embed_concurrency: int = 4
+    embedding_dim: int = 768
+
+    # Directory names skipped when walking a repository for source files.
+    index_exclude_dirs: list[str] = [
+        ".git",
+        "node_modules",
+        "target",
+        ".venv",
+        "venv",
+        "dist",
+        "build",
+        "data",
+        "__pycache__",
+    ]
+
     @property
     def data_path(self) -> Path:
         """Absolute, user-expanded path to the data directory."""
