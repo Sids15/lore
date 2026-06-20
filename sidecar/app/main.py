@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import parent_watchdog
 from app.api import health, index
 from app.config import get_settings
 from app.db import lancedb_client, sqlite_store
@@ -22,6 +23,8 @@ from app.db import lancedb_client, sqlite_store
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize the embedded data stores before serving requests."""
+    # Shut down if the parent (Tauri shell) dies, so we never orphan the port.
+    parent_watchdog.start()
     settings = get_settings()
     settings.data_path.mkdir(parents=True, exist_ok=True)
     sqlite_store.init_schema(settings.data_path)

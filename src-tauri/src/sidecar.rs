@@ -9,7 +9,7 @@
 //! ship a PyInstaller binary; that seam is added in the packaging phase.
 
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager};
@@ -62,6 +62,12 @@ fn build_command() -> Command {
         "--port",
         &port,
     ]);
+
+    // Enable the sidecar's parent-watchdog and give it a piped stdin to watch.
+    // The Child (held in managed state) keeps the write end open; if this shell
+    // dies for any reason the pipe closes, the sidecar sees EOF and exits, so it
+    // never orphans the port.
+    cmd.env("LORE_PARENT_WATCHDOG", "1").stdin(Stdio::piped());
 
     // Suppress the extra console window that would otherwise appear on Windows.
     #[cfg(windows)]
