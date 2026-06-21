@@ -85,6 +85,52 @@ def test_ungrounded_answer_is_flagged(monkeypatch):
     )
     assert resp.grounded is False
     assert resp.unsupported == ["circuit breaker claim"]
+    assert resp.corrected is False  # self-correction disabled -> no retry
+
+
+def test_self_correction_retries_when_ungrounded(monkeypatch):
+    async def fake_gather(question, route, settings, *, broaden=False, k=None):
+        # The broadened (retry) pass adds graph context.
+        notes = ["x calls y"] if broaden else []
+        return RetrievalBundle(chunks=[_chunk("a")], graph_notes=notes, graph_used=broaden)
+
+    monkeypatch.setattr(answer.context, "gather", fake_gather)
+
+    state = {"answers": 0}
+
+    async def fake_generate(base_url, model, prompt, *, system=None, **kwargs):
+        if system and "verify" in system.lower():
+            # Ground only the second answer.
+            return '{"grounded": true}' if state["answers"] >= 2 else '{"grounded": false}'
+        state["answers"] += 1
+        return f"answer {state['answers']}"
+
+    monkeypatch.setattr(answer.ollama_client, "generate", fake_generate)
+
+    resp = asyncio.run(
+        answer.answer_question(
+            "q", settings=Settings(router_enabled=False, self_correct_enabled=True)
+        )
+    )
+    assert resp.corrected is True
+    assert resp.grounded is True
+    assert resp.graph_used is True  # the broadened retry pulled in graph context
+
+
+def test_no_retry_when_already_grounded(monkeypatch):
+    _patch_gather(monkeypatch, [_chunk("a")])
+    calls = _patch_generate(
+        monkeypatch, answer_text="grounded answer", grounding_json='{"grounded": true}'
+    )
+
+    resp = asyncio.run(
+        answer.answer_question(
+            "q", settings=Settings(router_enabled=False, self_correct_enabled=True)
+        )
+    )
+    assert resp.grounded is True
+    assert resp.corrected is False
+    assert len(calls) == 2  # answer + grounding only; no retry pass
 
 
 def test_no_context_returns_fallback(monkeypatch):

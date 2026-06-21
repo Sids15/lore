@@ -52,6 +52,7 @@ class AnswerResponse(BaseModel):
     unsupported: list[str] = []
     categories: list[str] = []  # the router's classification of the question
     graph_used: bool = False  # whether graph context was folded in
+    corrected: bool = False  # whether a self-correction retry produced this answer
 
 
 async def _check_grounding(
@@ -86,28 +87,22 @@ async def _generate_answer(question: str, context_text: str, settings: Settings)
     )
 
 
-async def answer_question(
+async def _answer_from_bundle(
     question: str,
+    bundle: context.RetrievalBundle,
+    route: "router.RouteDecision",
+    settings: Settings,
     *,
-    k: int | None = None,
-    settings: Settings | None = None,
+    corrected: bool,
 ) -> AnswerResponse:
-    """Answer a question: route it, gather context (GraphRAG), generate, ground."""
-    settings = settings or get_settings()
-    route = await router.classify(question, settings)
-
-    if route.trivial:
-        answer = await ollama_client.generate(
-            settings.ollama_url, settings.generation_model, question, system=_TRIVIAL_SYSTEM
-        )
-        return AnswerResponse(
-            answer=answer, sources=[], grounded=True, categories=route.categories
-        )
-
-    bundle = await context.gather(question, route, settings, k=k)
+    """Generate + ground an answer from a gathered context bundle."""
     if not bundle.chunks and not bundle.graph_notes:
         return AnswerResponse(
-            answer=_NO_CONTEXT_ANSWER, sources=[], grounded=True, categories=route.categories
+            answer=_NO_CONTEXT_ANSWER,
+            sources=[],
+            grounded=True,
+            categories=route.categories,
+            corrected=corrected,
         )
 
     context_text = context.format_context(bundle)
@@ -124,4 +119,41 @@ async def answer_question(
         unsupported=unsupported,
         categories=route.categories,
         graph_used=bundle.graph_used,
+        corrected=corrected,
     )
+
+
+async def answer_question(
+    question: str,
+    *,
+    k: int | None = None,
+    settings: Settings | None = None,
+) -> AnswerResponse:
+    """Answer a question: route → gather (GraphRAG) → generate → ground → self-correct."""
+    settings = settings or get_settings()
+    route = await router.classify(question, settings)
+
+    if route.trivial:
+        answer = await ollama_client.generate(
+            settings.ollama_url, settings.generation_model, question, system=_TRIVIAL_SYSTEM
+        )
+        return AnswerResponse(
+            answer=answer, sources=[], grounded=True, categories=route.categories
+        )
+
+    bundle = await context.gather(question, route, settings, k=k)
+    had_context = bool(bundle.chunks or bundle.graph_notes)
+    result = await _answer_from_bundle(question, bundle, route, settings, corrected=False)
+
+    # Self-correction: one broaden+retry pass when the answer is weak.
+    if settings.self_correct_enabled and (not had_context or not result.grounded):
+        broadened = await context.gather(question, route, settings, k=k, broaden=True)
+        if broadened.chunks or broadened.graph_notes:
+            retry = await _answer_from_bundle(
+                question, broadened, route, settings, corrected=True
+            )
+            # Take the retry if we had nothing before, or if it is now grounded.
+            if not had_context or retry.grounded:
+                result = retry
+
+    return result
