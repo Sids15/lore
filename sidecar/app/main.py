@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import parent_watchdog
-from app.api import health, index
+from app.api import health, index, query
 from app.config import get_settings
 from app.db import lancedb_client, sqlite_store
 
@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(index.router)
+    app.include_router(query.router)
     return app
 
 

@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     fts_column: str = "enriched_text"
     rerank_candidates: int = 30  # hybrid candidates fed to the reranker
     retrieval_top_k: int = 8  # results returned after reranking
+    answer_context_k: int = 6  # top chunks included in the LLM answer context
+    grounding_enabled: bool = True  # second LLM pass that checks faithfulness
     rerank_enabled: bool = True
     rerank_model: str = "BAAI/bge-reranker-base"  # ONNX cross-encoder via fastembed
 
