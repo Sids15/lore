@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     enrich_enabled: bool = True
     enrich_concurrency: int = 4
 
+    # Semantic graph (Graph Layer B): the enrichment LLM call also extracts entity
+    # relationships (calls / inherits / implements / intent) used to build it.
+    semantic_enabled: bool = True
+
     # Embedding throughput and vector size (nomic-embed-text -> 768 dims).
     embed_concurrency: int = 4
     embedding_dim: int = 768

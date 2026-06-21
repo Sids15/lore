@@ -16,12 +16,12 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.db import lancedb_client, sqlite_store
-from app.graph import graph_store
+from app.graph import graph_store, semantic
 from app.graph.imports import extract_graph
 from app.index import code_index
 from app.index.code_index import CodeChunkRecord
 from app.ingest.ast_chunker import chunk_repo
-from app.ingest.enrich import enrich_chunks
+from app.ingest.enrich import EntityRelations, enrich_chunks
 from app.llm import ollama_client
 
 # Number of chunks processed (enriched + embedded + written) per batch.
@@ -75,6 +75,9 @@ async def index_repo(repo_path: Path) -> IndexJob:
     _job = IndexJob(state="running", repo=repo_path.name, message="Scanning files…")
 
     try:
+        # Ensure the embedded stores exist even when run outside the app lifespan.
+        sqlite_store.init_schema(settings.data_path)
+
         chunks = chunk_repo(repo_path)
         _job.total = len(chunks)
         _job.message = "Indexing…"
@@ -82,9 +85,13 @@ async def index_repo(repo_path: Path) -> IndexJob:
         db = lancedb_client.connect(settings.data_path)
         code_index.delete_repo(db, repo_path.name)
 
+        # Collected across batches to build the semantic graph after embedding.
+        relations_by_chunk: dict[str, EntityRelations] = {}
+
         for batch in _batches(chunks, _BATCH_SIZE):
             try:
-                texts = await enrich_chunks(batch, settings)
+                enrichments = await enrich_chunks(batch, settings)
+                texts = [e.embedding_text for e in enrichments]
                 vectors = await ollama_client.embed_many(
                     settings.ollama_url,
                     settings.embedding_model,
@@ -96,6 +103,9 @@ async def index_repo(repo_path: Path) -> IndexJob:
                     for chunk, text, vector in zip(batch, texts, vectors)
                 ]
                 code_index.upsert(db, records)
+                for chunk, enrichment in zip(batch, enrichments):
+                    if enrichment.relations is not None:
+                        relations_by_chunk[chunk.chunk_id] = enrichment.relations
             except (httpx.HTTPError, ValueError) as error:
                 _job.errors.append(f"batch failed: {error}")
             finally:
@@ -109,14 +119,24 @@ async def index_repo(repo_path: Path) -> IndexJob:
         nodes, edges = extract_graph(repo_path)
         conn = sqlite_store.connect(settings.data_path)
         try:
-            graph_store.replace_repo_graph(conn, repo_path.name, nodes, edges)
+            graph_store.replace_static_graph(conn, repo_path.name, nodes, edges)
             # Record the repo's path so architecture rules can be evaluated later.
             graph_store.upsert_repo(conn, repo_path.name, str(repo_path.resolve()))
+
+            # Build the semantic graph from the LLM-extracted relationships.
+            sem_edges: list = []
+            if settings.semantic_enabled and relations_by_chunk:
+                _job.message = "Extracting relationships…"
+                sem_nodes, sem_edges = semantic.build_semantic_graph(chunks, relations_by_chunk)
+                graph_store.replace_semantic_graph(conn, repo_path.name, sem_nodes, sem_edges)
         finally:
             conn.close()
 
         _job.state = "done"
-        _job.message = f"Indexed {_job.processed} chunks; {len(edges)} dependencies"
+        _job.message = (
+            f"Indexed {_job.processed} chunks; {len(edges)} dependencies, "
+            f"{len(sem_edges)} relationships"
+        )
         if _job.errors:
             _job.message += f" ({len(_job.errors)} batch error(s))"
     except Exception as error:  # noqa: BLE001 - report any failure to the UI

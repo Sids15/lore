@@ -1,31 +1,65 @@
-"""Contextual enrichment — the PRD's highest-leverage retrieval improvement.
+"""Contextual enrichment + semantic relationship extraction.
 
-Each code chunk is given a one- or two-sentence *situating header* written by the
-local LLM (e.g. "This function refreshes the auth token and is called from the
-Express middleware."). The header is prepended to the code before embedding, so a
-chunk is retrievable by what it *does*, not only by the identifiers it contains.
+A single local-LLM call per chunk does double duty:
 
-Enrichment is best-effort: if it is disabled or a model call fails, the raw code
-is used instead so ingestion never blocks.
+* **Enrichment** — a one/two-sentence *situating header* prepended to the code
+  before embedding, so a chunk is retrievable by what it *does* (the PRD's
+  highest-leverage retrieval improvement).
+* **Semantic extraction** — the relationships the chunk participates in (which
+  functions it **calls**, classes it **extends**/**implements**, and a short
+  design **intent**), used to build the semantic graph (Graph Layer B).
+
+Combining them keeps indexing to one LLM call per chunk. Everything is
+best-effort: if the call fails or its JSON can't be parsed, we fall back to the
+raw code / no relations so ingestion never blocks.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 
 import httpx
+from pydantic import BaseModel
 
 from app.config import Settings
 from app.ingest.ast_chunker import CodeChunk
 from app.llm import ollama_client
 
-_SYSTEM_PROMPT = (
+_SUMMARY_SYSTEM = (
     "You write concise, factual descriptions of code for a search index. "
     "Respond with one or two sentences and no preamble, markdown, or code."
 )
 
+_SEMANTIC_SYSTEM = (
+    "You analyze code and respond with ONLY a JSON object: "
+    '{"summary": "<1-2 sentence description of what it does>", '
+    '"calls": ["<functions/methods it calls>"], '
+    '"extends": ["<base classes>"], '
+    '"implements": ["<interfaces/traits>"], '
+    '"intent": "<short design intent>"}. '
+    "Use names exactly as they appear in the code. Use [] when none apply."
+)
 
-def _build_prompt(chunk: CodeChunk) -> str:
+
+class EntityRelations(BaseModel):
+    """Relationships extracted from a code entity (for the semantic graph)."""
+
+    calls: list[str] = []
+    extends: list[str] = []
+    implements: list[str] = []
+    intent: str = ""
+
+
+class ChunkEnrichment(BaseModel):
+    """Result of enriching one chunk: text to embed + (optional) relations."""
+
+    embedding_text: str
+    relations: EntityRelations | None = None
+
+
+def _summary_prompt(chunk: CodeChunk) -> str:
     return (
         f"Describe what this {chunk.kind} `{chunk.symbol}` from `{chunk.file_path}` does and "
         f"the role it plays, in one or two sentences for a code search index. "
@@ -34,41 +68,87 @@ def _build_prompt(chunk: CodeChunk) -> str:
     )
 
 
-def _compose(header: str, chunk: CodeChunk) -> str:
-    header = header.strip()
-    return f"{header}\n\n{chunk.code}" if header else chunk.code
+def _semantic_prompt(chunk: CodeChunk) -> str:
+    return (
+        f"Analyze this {chunk.kind} `{chunk.symbol}` from `{chunk.file_path}`.\n\n"
+        f"```{chunk.language}\n{chunk.code}\n```"
+    )
 
 
-async def enrich_chunk(chunk: CodeChunk, settings: Settings) -> str:
-    """Return the chunk's embedding text: situating header + code, or just code.
+def _compose(summary: str, chunk: CodeChunk) -> str:
+    summary = summary.strip()
+    return f"{summary}\n\n{chunk.code}" if summary else chunk.code
 
-    Never raises — failures fall back to the raw code.
-    """
-    if not settings.enrich_enabled:
-        return chunk.code
+
+def _parse_json_object(text: str) -> dict | None:
+    """Extract and parse the first JSON object in a string, or None."""
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match is None:
+        return None
     try:
-        header = await ollama_client.generate(
-            settings.ollama_url,
-            settings.generation_model,
-            _build_prompt(chunk),
-            system=_SYSTEM_PROMPT,
+        parsed = json.loads(match.group(0))
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _relations_from(data: dict) -> EntityRelations:
+    def names(key: str) -> list[str]:
+        value = data.get(key)
+        return [str(v) for v in value] if isinstance(value, list) else []
+
+    return EntityRelations(
+        calls=names("calls"),
+        extends=names("extends"),
+        implements=names("implements"),
+        intent=str(data.get("intent") or ""),
+    )
+
+
+async def enrich_chunk(chunk: CodeChunk, settings: Settings) -> ChunkEnrichment:
+    """Enrich a single chunk. Never raises — failures fall back to raw code."""
+    if not settings.enrich_enabled:
+        return ChunkEnrichment(embedding_text=chunk.code)
+
+    semantic = settings.semantic_enabled
+    system = _SEMANTIC_SYSTEM if semantic else _SUMMARY_SYSTEM
+    prompt = _semantic_prompt(chunk) if semantic else _summary_prompt(chunk)
+
+    try:
+        raw = await ollama_client.generate(
+            settings.ollama_url, settings.generation_model, prompt, system=system
         )
     except (httpx.HTTPError, ValueError):
-        return chunk.code
-    return _compose(header, chunk)
+        return ChunkEnrichment(embedding_text=chunk.code)
+
+    if not semantic:
+        return ChunkEnrichment(embedding_text=_compose(raw, chunk))
+
+    data = _parse_json_object(raw)
+    if data is None:
+        # JSON failed — still use the raw text as a header, but no relations.
+        return ChunkEnrichment(embedding_text=_compose(raw, chunk))
+
+    summary = str(data.get("summary") or "")
+    return ChunkEnrichment(
+        embedding_text=_compose(summary, chunk),
+        relations=_relations_from(data),
+    )
 
 
-async def enrich_chunks(chunks: list[CodeChunk], settings: Settings) -> list[str]:
+async def enrich_chunks(
+    chunks: list[CodeChunk], settings: Settings
+) -> list[ChunkEnrichment]:
     """Enrich many chunks concurrently, bounded by ``enrich_concurrency``.
 
-    Returns embedding texts aligned 1:1 with the input chunks.
+    Returns results aligned 1:1 with the input chunks.
     """
     if not settings.enrich_enabled:
-        return [chunk.code for chunk in chunks]
+        return [ChunkEnrichment(embedding_text=chunk.code) for chunk in chunks]
 
     semaphore = asyncio.Semaphore(settings.enrich_concurrency)
 
-    async def run(chunk: CodeChunk) -> str:
+    async def run(chunk: CodeChunk) -> ChunkEnrichment:
         async with semaphore:
             return await enrich_chunk(chunk, settings)
 

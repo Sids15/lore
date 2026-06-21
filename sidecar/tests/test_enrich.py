@@ -1,4 +1,4 @@
-"""Tests for contextual enrichment (no network: the LLM call is monkeypatched)."""
+"""Tests for enrichment + semantic extraction (no network: generate mocked)."""
 
 from __future__ import annotations
 
@@ -26,29 +26,50 @@ def _chunk() -> CodeChunk:
     )
 
 
-def test_disabled_returns_raw_code():
+def test_disabled_returns_raw_code_no_relations():
     settings = Settings(enrich_enabled=False)
-    chunk = _chunk()
-    assert asyncio.run(enrich.enrich_chunk(chunk, settings)) == chunk.code
+    result = asyncio.run(enrich.enrich_chunk(_chunk(), settings))
+    assert result.embedding_text == _chunk().code
+    assert result.relations is None
 
 
-def test_disabled_batch_returns_raw_code():
-    settings = Settings(enrich_enabled=False)
-    chunks = [_chunk()]
-    assert asyncio.run(enrich.enrich_chunks(chunks, settings)) == [chunks[0].code]
-
-
-def test_enabled_prepends_header(monkeypatch):
+def test_semantic_extraction_parses_json(monkeypatch):
     async def fake_generate(*args, **kwargs):
-        return "Returns the integer one."
+        return (
+            '{"summary": "Returns one.", "calls": ["g"], "extends": [], '
+            '"implements": [], "intent": "demo"}'
+        )
 
     monkeypatch.setattr(enrich.ollama_client, "generate", fake_generate)
-    settings = Settings(enrich_enabled=True)
-    chunk = _chunk()
+    result = asyncio.run(enrich.enrich_chunk(_chunk(), Settings(semantic_enabled=True)))
 
-    out = asyncio.run(enrich.enrich_chunk(chunk, settings))
-    assert out.startswith("Returns the integer one.")
-    assert chunk.code in out
+    assert result.embedding_text.startswith("Returns one.")
+    assert _chunk().code in result.embedding_text
+    assert result.relations is not None
+    assert result.relations.calls == ["g"]
+    assert result.relations.intent == "demo"
+
+
+def test_summary_only_when_semantic_disabled(monkeypatch):
+    async def fake_generate(*args, **kwargs):
+        return "A plain header."
+
+    monkeypatch.setattr(enrich.ollama_client, "generate", fake_generate)
+    result = asyncio.run(
+        enrich.enrich_chunk(_chunk(), Settings(semantic_enabled=False))
+    )
+    assert result.embedding_text.startswith("A plain header.")
+    assert result.relations is None
+
+
+def test_unparseable_json_falls_back_to_header(monkeypatch):
+    async def fake_generate(*args, **kwargs):
+        return "not json, just prose"
+
+    monkeypatch.setattr(enrich.ollama_client, "generate", fake_generate)
+    result = asyncio.run(enrich.enrich_chunk(_chunk(), Settings(semantic_enabled=True)))
+    assert result.embedding_text.startswith("not json, just prose")
+    assert result.relations is None
 
 
 def test_failure_falls_back_to_code(monkeypatch):
@@ -56,7 +77,14 @@ def test_failure_falls_back_to_code(monkeypatch):
         raise httpx.ConnectError("ollama down")
 
     monkeypatch.setattr(enrich.ollama_client, "generate", boom)
-    settings = Settings(enrich_enabled=True)
-    chunk = _chunk()
+    result = asyncio.run(enrich.enrich_chunk(_chunk(), Settings()))
+    assert result.embedding_text == _chunk().code
+    assert result.relations is None
 
-    assert asyncio.run(enrich.enrich_chunk(chunk, settings)) == chunk.code
+
+def test_batch_returns_one_result_per_chunk():
+    settings = Settings(enrich_enabled=False)
+    chunks = [_chunk(), _chunk()]
+    results = asyncio.run(enrich.enrich_chunks(chunks, settings))
+    assert len(results) == 2
+    assert all(r.embedding_text == chunks[0].code for r in results)

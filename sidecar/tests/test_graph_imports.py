@@ -75,9 +75,9 @@ def test_graph_persists_and_reloads(tmp_path):
     nodes, edges = extract_graph(repo)
     conn = sqlite_store.connect(data_dir)
     try:
-        graph_store.replace_repo_graph(conn, "repo", nodes, edges)
+        graph_store.replace_static_graph(conn, "repo", nodes, edges)
         # Re-running must not duplicate (idempotent).
-        graph_store.replace_repo_graph(conn, "repo", nodes, edges)
+        graph_store.replace_static_graph(conn, "repo", nodes, edges)
         loaded = graph_store.load_static_graph(conn, "repo")
     finally:
         conn.close()
