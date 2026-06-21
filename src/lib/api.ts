@@ -99,3 +99,40 @@ export async function fetchIndexStats(signal?: AbortSignal): Promise<IndexStats>
   const response = await fetch(`${sidecarBaseUrl}/index/stats`, { signal });
   return parseOrThrow<IndexStats>(response, "Fetch index stats");
 }
+
+/** A retrieved code chunk cited as a source for an answer. */
+export interface Source {
+  chunk_id: string;
+  repo: string;
+  file_path: string;
+  language: string;
+  kind: string;
+  symbol: string;
+  qualified_name: string;
+  start_line: number;
+  end_line: number;
+  code: string;
+  score: number;
+}
+
+/** A grounded answer with its sources (mirrors the sidecar AnswerResponse). */
+export interface AnswerResponse {
+  answer: string;
+  sources: Source[];
+  grounded: boolean;
+  unsupported: string[];
+}
+
+/** Ask a grounded question about the indexed repository. */
+export async function askQuestion(
+  question: string,
+  signal?: AbortSignal,
+): Promise<AnswerResponse> {
+  const response = await fetch(`${sidecarBaseUrl}/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+    signal,
+  });
+  return parseOrThrow<AnswerResponse>(response, "Ask question");
+}

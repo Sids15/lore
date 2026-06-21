@@ -248,3 +248,149 @@ body,
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+
+/* ───────────────────────────── Ask / Query panel ───────────────────────────── */
+
+.query {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  text-align: left;
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
+}
+
+.query__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.query__input {
+  width: 100%;
+  resize: vertical;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0b0d11;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.query__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.query__btn {
+  align-self: flex-start;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #0b0d11;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.query__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.query__error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #e5484d;
+}
+
+.query__answer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0b0d11;
+}
+
+.query__answer-head {
+  display: flex;
+}
+
+.query__badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.query__badge--ok {
+  color: #4caf50;
+  background: rgba(76, 175, 80, 0.12);
+}
+
+.query__badge--warn {
+  color: #e0b341;
+  background: rgba(224, 179, 65, 0.12);
+}
+
+.query__answer-text {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.query__unsupported {
+  margin: 0;
+  padding-left: 1rem;
+  font-size: 0.82rem;
+  color: #e0b341;
+}
+
+.query__sources-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.query__sources ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.query__sources li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.query__sources code {
+  color: var(--text);
+}
+
+.query__source-loc {
+  font-family: ui-monospace, monospace;
+}
+
+.query__source-kind {
+  font-size: 0.72rem;
+  opacity: 0.7;
+}

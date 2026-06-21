@@ -1,4 +1,5 @@
 import { IndexPanel } from "./components/IndexPanel";
+import { QueryPanel } from "./components/QueryPanel";
 import { StatusPanel } from "./components/StatusPanel";
 import "./App.css";
 
@@ -21,6 +22,7 @@ function App() {
       <section className="app__body">
         <StatusPanel />
         <IndexPanel />
+        <QueryPanel />
       </section>
     </main>
   );
