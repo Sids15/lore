@@ -15,7 +15,9 @@ import httpx
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.db import lancedb_client
+from app.db import lancedb_client, sqlite_store
+from app.graph import graph_store
+from app.graph.imports import extract_graph
 from app.index import code_index
 from app.index.code_index import CodeChunkRecord
 from app.ingest.ast_chunker import chunk_repo
@@ -102,8 +104,17 @@ async def index_repo(repo_path: Path) -> IndexJob:
         # Rebuild the full-text index so keyword/hybrid search covers the new rows.
         code_index.ensure_fts_index(db, force=True)
 
+        # Build the static dependency graph (deterministic, no LLM).
+        _job.message = "Building dependency graph…"
+        nodes, edges = extract_graph(repo_path)
+        conn = sqlite_store.connect(settings.data_path)
+        try:
+            graph_store.replace_repo_graph(conn, repo_path.name, nodes, edges)
+        finally:
+            conn.close()
+
         _job.state = "done"
-        _job.message = f"Indexed {_job.processed} chunks"
+        _job.message = f"Indexed {_job.processed} chunks; {len(edges)} dependencies"
         if _job.errors:
             _job.message += f" ({len(_job.errors)} batch error(s))"
     except Exception as error:  # noqa: BLE001 - report any failure to the UI

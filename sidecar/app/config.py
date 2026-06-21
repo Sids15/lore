@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     # out of git (rather than a volatile temp directory).
     model_cache_dir: Path | None = None
 
+    # --- Architecture graph (Phase 3) ---
+    graph_max_cycles: int = 50  # cap on reported import cycles
+    graph_max_nodes: int = 600  # safety cap on nodes sent to the visualization
+
     # Directory names skipped when walking a repository for source files.
     index_exclude_dirs: list[str] = [
         ".git",

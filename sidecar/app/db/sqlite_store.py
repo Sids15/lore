@@ -70,10 +70,11 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     # --- Graph index (Index A: Layer A static + Layer B semantic) ---
     """
     CREATE TABLE IF NOT EXISTS graph_nodes (
-        node_key  TEXT PRIMARY KEY,            -- stable id, e.g. "module:src/auth.ts"
+        node_key  TEXT PRIMARY KEY,            -- stable id, e.g. "module:repo:src/auth.ts"
         node_type TEXT NOT NULL,               -- module | class | function | ...
         name      TEXT NOT NULL,
         file_path TEXT,
+        repo      TEXT,                         -- owning repository (for per-repo rebuilds)
         metadata  TEXT                         -- JSON blob for extra attributes
     )
     """,
@@ -113,6 +114,13 @@ def connect(data_dir: Path) -> sqlite3.Connection:
     return conn
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply idempotent migrations to upgrade older databases in place."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(graph_nodes)")}
+    if "repo" not in columns:
+        conn.execute("ALTER TABLE graph_nodes ADD COLUMN repo TEXT")
+
+
 def init_schema(data_dir: Path) -> None:
     """Create all tables and indexes if they do not already exist."""
     conn = connect(data_dir)
@@ -120,6 +128,7 @@ def init_schema(data_dir: Path) -> None:
         with conn:  # transaction: commit on success, rollback on error
             for statement in SCHEMA_STATEMENTS:
                 conn.execute(statement)
+            _migrate(conn)
     finally:
         conn.close()
 
