@@ -81,3 +81,45 @@ def search(db: DBConnection, vector: list[float], k: int = 5) -> list[dict]:
     if not _table_exists(db):
         return []
     return db.open_table(TABLE_NAME).search(vector).limit(k).to_list()
+
+
+def _has_fts_index(table, column: str) -> bool:
+    return any(column in (idx.columns or []) for idx in table.list_indices())
+
+
+def ensure_fts_index(db: DBConnection, *, force: bool = False) -> None:
+    """Ensure a full-text index exists on the configured text column.
+
+    Building the FTS index is what enables keyword (and therefore hybrid) search.
+    It is created over the existing rows, so no re-embedding is needed. Pass
+    ``force=True`` after ingestion to rebuild it so newly added rows are covered.
+    """
+    if not _table_exists(db):
+        return
+    column = get_settings().fts_column
+    table = db.open_table(TABLE_NAME)
+    if force or not _has_fts_index(table, column):
+        table.create_fts_index(column, replace=True)
+
+
+def hybrid_search(
+    db: DBConnection,
+    query_vector: list[float],
+    query_text: str,
+    k: int,
+) -> list[dict]:
+    """Hybrid (vector + FTS) search merged with LanceDB's built-in RRF reranker.
+
+    Returns up to ``k`` rows, each including a ``_relevance_score`` (RRF score).
+    """
+    if not _table_exists(db):
+        return []
+    ensure_fts_index(db)  # create on demand so already-indexed repos work
+    table = db.open_table(TABLE_NAME)
+    return (
+        table.search(query_type="hybrid")
+        .vector(query_vector)
+        .text(query_text)
+        .limit(k)
+        .to_list()
+    )

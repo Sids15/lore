@@ -61,6 +61,20 @@ class Settings(BaseSettings):
     embed_concurrency: int = 4
     embedding_dim: int = 768
 
+    # --- Retrieval (Phase 2) ---
+    # Hybrid search (vector + LanceDB FTS, merged with RRF), then a cross-encoder
+    # reranker re-scores the candidates down to the final set.
+    fts_column: str = "enriched_text"
+    rerank_candidates: int = 30  # hybrid candidates fed to the reranker
+    retrieval_top_k: int = 8  # results returned after reranking
+    rerank_enabled: bool = True
+    rerank_model: str = "BAAI/bge-reranker-base"  # ONNX cross-encoder via fastembed
+
+    # Where downloaded model files (e.g. the ONNX reranker) are cached. Defaults
+    # to a "models" folder under the data dir so it persists across runs and stays
+    # out of git (rather than a volatile temp directory).
+    model_cache_dir: Path | None = None
+
     # Directory names skipped when walking a repository for source files.
     index_exclude_dirs: list[str] = [
         ".git",
@@ -78,6 +92,12 @@ class Settings(BaseSettings):
     def data_path(self) -> Path:
         """Absolute, user-expanded path to the data directory."""
         return self.data_dir.expanduser().resolve()
+
+    @property
+    def model_cache_path(self) -> Path:
+        """Absolute path where downloaded model files are cached."""
+        base = self.model_cache_dir if self.model_cache_dir is not None else self.data_path / "models"
+        return Path(base).expanduser().resolve()
 
 
 @lru_cache

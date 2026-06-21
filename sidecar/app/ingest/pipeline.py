@@ -99,6 +99,9 @@ async def index_repo(repo_path: Path) -> IndexJob:
             finally:
                 _job.processed += len(batch)
 
+        # Rebuild the full-text index so keyword/hybrid search covers the new rows.
+        code_index.ensure_fts_index(db, force=True)
+
         _job.state = "done"
         _job.message = f"Indexed {_job.processed} chunks"
         if _job.errors:
