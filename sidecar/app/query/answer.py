@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from app.config import Settings, get_settings
 from app.llm import ollama_client
 from app.llm.parsing import parse_json_object
-from app.retrieval import hybrid
+from app.query import context, router
 from app.retrieval.hybrid import RetrievedChunk
 
 _ANSWER_SYSTEM = (
@@ -32,6 +32,11 @@ _GROUNDING_SYSTEM = (
     '[<short description of each claim not supported by the sources>]}.'
 )
 
+_TRIVIAL_SYSTEM = (
+    "You are Lore, an assistant for asking questions about a codebase. The user's "
+    "message does not require looking at code. Reply briefly and helpfully."
+)
+
 _NO_CONTEXT_ANSWER = (
     "I couldn't find anything relevant in the indexed code. "
     "Make sure the repository has been indexed, then try again."
@@ -39,24 +44,14 @@ _NO_CONTEXT_ANSWER = (
 
 
 class AnswerResponse(BaseModel):
-    """A grounded answer plus the sources it was built from."""
+    """A grounded answer plus the sources and how it was produced."""
 
     answer: str
     sources: list[RetrievedChunk]
     grounded: bool
     unsupported: list[str] = []
-
-
-def _format_context(chunks: list[RetrievedChunk]) -> str:
-    """Render chunks as numbered, citable snippets for the prompt."""
-    blocks = []
-    for index, chunk in enumerate(chunks, start=1):
-        header = (
-            f"[{index}] {chunk.file_path}:{chunk.start_line}-{chunk.end_line} "
-            f"({chunk.kind} {chunk.symbol})"
-        )
-        blocks.append(f"{header}\n{chunk.code}")
-    return "\n\n".join(blocks)
+    categories: list[str] = []  # the router's classification of the question
+    graph_used: bool = False  # whether graph context was folded in
 
 
 async def _check_grounding(
@@ -84,36 +79,49 @@ async def _check_grounding(
     return bool(data.get("grounded", True)), list(data.get("unsupported") or [])
 
 
+async def _generate_answer(question: str, context_text: str, settings: Settings) -> str:
+    prompt = f"Context snippets:\n\n{context_text}\n\nQuestion: {question}\n\nAnswer:"
+    return await ollama_client.generate(
+        settings.ollama_url, settings.generation_model, prompt, system=_ANSWER_SYSTEM
+    )
+
+
 async def answer_question(
     question: str,
     *,
     k: int | None = None,
     settings: Settings | None = None,
 ) -> AnswerResponse:
-    """Answer a question about the indexed code, with a grounding check."""
+    """Answer a question: route it, gather context (GraphRAG), generate, ground."""
     settings = settings or get_settings()
+    route = await router.classify(question, settings)
 
-    retrieved = await hybrid.retrieve(question, k=k, settings=settings)
-    context_chunks = retrieved[: settings.answer_context_k]
-    if not context_chunks:
-        return AnswerResponse(answer=_NO_CONTEXT_ANSWER, sources=[], grounded=True)
+    if route.trivial:
+        answer = await ollama_client.generate(
+            settings.ollama_url, settings.generation_model, question, system=_TRIVIAL_SYSTEM
+        )
+        return AnswerResponse(
+            answer=answer, sources=[], grounded=True, categories=route.categories
+        )
 
-    context = _format_context(context_chunks)
-    prompt = f"Context snippets:\n\n{context}\n\nQuestion: {question}\n\nAnswer:"
-    answer = await ollama_client.generate(
-        settings.ollama_url,
-        settings.generation_model,
-        prompt,
-        system=_ANSWER_SYSTEM,
-    )
+    bundle = await context.gather(question, route, settings, k=k)
+    if not bundle.chunks and not bundle.graph_notes:
+        return AnswerResponse(
+            answer=_NO_CONTEXT_ANSWER, sources=[], grounded=True, categories=route.categories
+        )
+
+    context_text = context.format_context(bundle)
+    answer = await _generate_answer(question, context_text, settings)
 
     grounded, unsupported = True, []
     if settings.grounding_enabled:
-        grounded, unsupported = await _check_grounding(answer, context, settings)
+        grounded, unsupported = await _check_grounding(answer, context_text, settings)
 
     return AnswerResponse(
         answer=answer,
-        sources=context_chunks,
+        sources=bundle.chunks,
         grounded=grounded,
         unsupported=unsupported,
+        categories=route.categories,
+        graph_used=bundle.graph_used,
     )

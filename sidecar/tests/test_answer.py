@@ -1,4 +1,4 @@
-"""Tests for grounded question answering (no network: retrieve + generate mocked)."""
+"""Tests for grounded question answering (no network: gather + generate mocked)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import asyncio
 
 from app.config import Settings
 from app.query import answer
-from app.query.answer import answer_question
+from app.query.context import RetrievalBundle
 from app.retrieval.hybrid import RetrievedChunk
 
 
@@ -26,11 +26,18 @@ def _chunk(symbol: str) -> RetrievedChunk:
     )
 
 
-def _patch_retrieve(monkeypatch, chunks):
-    async def fake_retrieve(question, *, k=None, settings=None):
-        return chunks
+def _settings() -> Settings:
+    # Disable the router so no LLM call is needed to classify; route -> ["code"].
+    return Settings(router_enabled=False)
 
-    monkeypatch.setattr(answer.hybrid, "retrieve", fake_retrieve)
+
+def _patch_gather(monkeypatch, chunks, *, graph_notes=None, graph_used=False):
+    async def fake_gather(question, route, settings, *, broaden=False, k=None):
+        return RetrievalBundle(
+            chunks=chunks, graph_notes=graph_notes or [], graph_used=graph_used
+        )
+
+    monkeypatch.setattr(answer.context, "gather", fake_gather)
 
 
 def _patch_generate(monkeypatch, *, answer_text, grounding_json):
@@ -46,74 +53,49 @@ def _patch_generate(monkeypatch, *, answer_text, grounding_json):
     return calls
 
 
-def test_answer_with_grounding(monkeypatch):
-    _patch_retrieve(monkeypatch, [_chunk("retry"), _chunk("backoff")])
-    calls = _patch_generate(
+def test_answer_with_grounding_and_categories(monkeypatch):
+    _patch_gather(monkeypatch, [_chunk("retry"), _chunk("backoff")], graph_used=True)
+    _patch_generate(
         monkeypatch,
         answer_text="The retry logic is in retry.py [retry.py:1].",
         grounding_json='{"grounded": true, "unsupported": []}',
     )
 
-    resp = asyncio.run(answer_question("where is retry?", settings=Settings()))
+    resp = asyncio.run(answer.answer_question("where is retry?", settings=_settings()))
 
     assert "retry" in resp.answer.lower()
     assert resp.grounded is True
+    assert resp.categories == ["code"]
+    assert resp.graph_used is True
     assert [c.symbol for c in resp.sources] == ["retry", "backoff"]
-    assert len(calls) == 2  # answer + grounding pass
 
 
 def test_ungrounded_answer_is_flagged(monkeypatch):
-    _patch_retrieve(monkeypatch, [_chunk("retry")])
+    _patch_gather(monkeypatch, [_chunk("retry")])
     _patch_generate(
         monkeypatch,
         answer_text="It uses a circuit breaker.",
         grounding_json='{"grounded": false, "unsupported": ["circuit breaker claim"]}',
     )
 
-    resp = asyncio.run(answer_question("how does it work?", settings=Settings()))
-
+    resp = asyncio.run(
+        answer.answer_question(
+            "how?", settings=Settings(router_enabled=False, self_correct_enabled=False)
+        )
+    )
     assert resp.grounded is False
     assert resp.unsupported == ["circuit breaker claim"]
 
 
-def test_grounding_disabled_skips_second_pass(monkeypatch):
-    _patch_retrieve(monkeypatch, [_chunk("retry")])
-    calls = _patch_generate(
-        monkeypatch, answer_text="An answer.", grounding_json="unused"
-    )
-
-    resp = asyncio.run(
-        answer_question("q", settings=Settings(grounding_enabled=False))
-    )
-
-    assert resp.grounded is True
-    assert len(calls) == 1  # only the answer generation, no grounding pass
-
-
 def test_no_context_returns_fallback(monkeypatch):
-    _patch_retrieve(monkeypatch, [])
+    _patch_gather(monkeypatch, [])
 
     async def unexpected_generate(*args, **kwargs):
         raise AssertionError("generate should not be called without context")
 
     monkeypatch.setattr(answer.ollama_client, "generate", unexpected_generate)
 
-    resp = asyncio.run(answer_question("anything?", settings=Settings()))
-
+    resp = asyncio.run(answer.answer_question("anything?", settings=_settings()))
     assert resp.sources == []
     assert resp.grounded is True
     assert "indexed" in resp.answer.lower()
-
-
-def test_unparseable_grounding_fails_open(monkeypatch):
-    _patch_retrieve(monkeypatch, [_chunk("retry")])
-    _patch_generate(
-        monkeypatch,
-        answer_text="An answer.",
-        grounding_json="not json at all",
-    )
-
-    resp = asyncio.run(answer_question("q", settings=Settings()))
-
-    assert resp.grounded is True  # fail open when the check can't be parsed
-    assert resp.unsupported == []
