@@ -17,8 +17,6 @@ raw code / no relations so ingestion never blocks.
 from __future__ import annotations
 
 import asyncio
-import json
-import re
 
 import httpx
 from pydantic import BaseModel
@@ -26,6 +24,7 @@ from pydantic import BaseModel
 from app.config import Settings
 from app.ingest.ast_chunker import CodeChunk
 from app.llm import ollama_client
+from app.llm.parsing import parse_json_object
 
 _SUMMARY_SYSTEM = (
     "You write concise, factual descriptions of code for a search index. "
@@ -80,18 +79,6 @@ def _compose(summary: str, chunk: CodeChunk) -> str:
     return f"{summary}\n\n{chunk.code}" if summary else chunk.code
 
 
-def _parse_json_object(text: str) -> dict | None:
-    """Extract and parse the first JSON object in a string, or None."""
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match is None:
-        return None
-    try:
-        parsed = json.loads(match.group(0))
-    except ValueError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
 def _relations_from(data: dict) -> EntityRelations:
     def names(key: str) -> list[str]:
         value = data.get(key)
@@ -124,7 +111,7 @@ async def enrich_chunk(chunk: CodeChunk, settings: Settings) -> ChunkEnrichment:
     if not semantic:
         return ChunkEnrichment(embedding_text=_compose(raw, chunk))
 
-    data = _parse_json_object(raw)
+    data = parse_json_object(raw)
     if data is None:
         # JSON failed — still use the raw text as a header, but no relations.
         return ChunkEnrichment(embedding_text=_compose(raw, chunk))

@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     answer_context_k: int = 6  # top chunks included in the LLM answer context
     grounding_enabled: bool = True  # second LLM pass that checks faithfulness
     rerank_enabled: bool = True
+
+    # --- Agentic query layer (Phase 5) ---
+    router_enabled: bool = True  # LLM classifies each question to route retrieval
+    graphrag_enabled: bool = True  # fold graph neighbours/facts into the context
+    self_correct_enabled: bool = True  # one broaden+retry pass on weak answers
+    graph_context_neighbours: int = 8  # max graph facts added to the context
+    correction_k_multiplier: int = 2  # how much to widen retrieval on a retry
     rerank_model: str = "BAAI/bge-reranker-base"  # ONNX cross-encoder via fastembed
 
     # Where downloaded model files (e.g. the ONNX reranker) are cached. Defaults

@@ -10,14 +10,12 @@ flaky check never blocks a useful response.
 
 from __future__ import annotations
 
-import json
-import re
-
 import httpx
 from pydantic import BaseModel
 
 from app.config import Settings, get_settings
 from app.llm import ollama_client
+from app.llm.parsing import parse_json_object
 from app.retrieval import hybrid
 from app.retrieval.hybrid import RetrievedChunk
 
@@ -61,18 +59,6 @@ def _format_context(chunks: list[RetrievedChunk]) -> str:
     return "\n\n".join(blocks)
 
 
-def _parse_json_object(text: str) -> dict | None:
-    """Extract and parse the first JSON object in a string, or None."""
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match is None:
-        return None
-    try:
-        parsed = json.loads(match.group(0))
-    except ValueError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
 async def _check_grounding(
     answer: str, context: str, settings: Settings
 ) -> tuple[bool, list[str]]:
@@ -92,7 +78,7 @@ async def _check_grounding(
     except (httpx.HTTPError, ValueError):
         return True, []  # fail open: don't block the answer on a failed check
 
-    data = _parse_json_object(raw)
+    data = parse_json_object(raw)
     if data is None:
         return True, []
     return bool(data.get("grounded", True)), list(data.get("unsupported") or [])
