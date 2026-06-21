@@ -160,9 +160,15 @@ export interface GraphViz {
   truncated: boolean;
 }
 
-/** Fetch the dependency graph for visualization. */
-export async function fetchGraph(signal?: AbortSignal): Promise<GraphViz> {
-  const response = await fetch(`${sidecarBaseUrl}/graph`, { signal });
+/** Which graph layer to view: exact imports, or LLM-extracted relationships. */
+export type GraphLayer = "static" | "semantic";
+
+/** Fetch a graph layer for visualization. */
+export async function fetchGraph(
+  layer: GraphLayer = "static",
+  signal?: AbortSignal,
+): Promise<GraphViz> {
+  const response = await fetch(`${sidecarBaseUrl}/graph?layer=${layer}`, { signal });
   return parseOrThrow<GraphViz>(response, "Fetch graph");
 }
 

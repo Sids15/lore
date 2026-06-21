@@ -49,41 +49,52 @@ class ViolationsResponse(BaseModel):
     violations: list[Violation]
 
 
-def _load(repo: str | None) -> GraphData:
+_VALID_LAYERS = {"static", "semantic"}
+
+
+def _check_layer(layer: str) -> str:
+    if layer not in _VALID_LAYERS:
+        raise HTTPException(status_code=400, detail="layer must be 'static' or 'semantic'")
+    return layer
+
+
+def _load(repo: str | None, layer: str = "static") -> GraphData:
     settings = get_settings()
     conn = sqlite_store.connect(settings.data_path)
     try:
-        return graph_store.load_static_graph(conn, repo)
+        return graph_store.load_graph(conn, repo, layer)
     finally:
         conn.close()
 
 
 @router.get("/graph", response_model=GraphViz)
-def graph(repo: str | None = None) -> GraphViz:
-    """Return the dependency graph as a visualization payload."""
+def graph(repo: str | None = None, layer: str = "static") -> GraphViz:
+    """Return a graph layer (static imports or semantic relationships) for viz."""
     settings = get_settings()
-    data = _load(repo)
+    data = _load(repo, _check_layer(layer))
     return GraphViz(**analysis.to_viz(data, settings.graph_max_nodes, settings.graph_max_cycles))
 
 
 @router.get("/graph/cycles", response_model=CyclesResponse)
-def cycles(repo: str | None = None) -> CyclesResponse:
-    """Return detected import cycles (circular dependencies)."""
+def cycles(repo: str | None = None, layer: str = "static") -> CyclesResponse:
+    """Return cycles in the given graph layer (circular dependencies/calls)."""
     settings = get_settings()
-    data = _load(repo)
+    data = _load(repo, _check_layer(layer))
     return CyclesResponse(cycles=analysis.find_cycles(data, settings.graph_max_cycles))
 
 
 @router.get("/graph/stats")
-def stats(repo: str | None = None) -> dict:
-    """Return node/edge counts and the most-depended-on / most-importing files."""
-    return analysis.degree_stats(_load(repo))
+def stats(repo: str | None = None, layer: str = "static") -> dict:
+    """Return node/edge counts and degree rankings for the given layer."""
+    return analysis.degree_stats(_load(repo, _check_layer(layer)))
 
 
 @router.get("/graph/path", response_model=PathResponse)
-def path(source: str, target: str, repo: str | None = None) -> PathResponse:
-    """Return the shortest dependency path from source to target, if any."""
-    data = _load(repo)
+def path(
+    source: str, target: str, repo: str | None = None, layer: str = "static"
+) -> PathResponse:
+    """Return the shortest path from source to target in the given layer, if any."""
+    data = _load(repo, _check_layer(layer))
     if source not in data.nodes or target not in data.nodes:
         raise HTTPException(status_code=404, detail="source or target not in graph")
     return PathResponse(path=analysis.shortest_path(data, source, target))
