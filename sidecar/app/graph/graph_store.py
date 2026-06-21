@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timezone
 from dataclasses import dataclass
 
 from app.graph.imports import ImportEdge
@@ -91,3 +92,26 @@ def load_static_graph(conn: sqlite3.Connection, repo: str | None = None) -> Grap
     nodes = [row[0] for row in node_rows]
     edges = [(row[0], row[1]) for row in edge_rows]
     return GraphData(nodes=nodes, edges=edges)
+
+
+def upsert_repo(conn: sqlite3.Connection, name: str, path: str) -> None:
+    """Record (or update) the on-disk path of an indexed repository."""
+    now = datetime.now(timezone.utc).isoformat()
+    with conn:
+        conn.execute(
+            "INSERT INTO repos (name, path, indexed_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET path = excluded.path, "
+            "indexed_at = excluded.indexed_at",
+            (name, path, now),
+        )
+
+
+def get_repo_path(conn: sqlite3.Connection, name: str) -> str | None:
+    """Return the absolute path recorded for an indexed repo, or None."""
+    row = conn.execute("SELECT path FROM repos WHERE name = ?", (name,)).fetchone()
+    return row[0] if row else None
+
+
+def list_repos(conn: sqlite3.Connection) -> list[str]:
+    """Return the names of all indexed repos."""
+    return [row[0] for row in conn.execute("SELECT name FROM repos ORDER BY name")]

@@ -24,6 +24,7 @@ EXPECTED_TABLES = {
     "authorship",
     "graph_nodes",
     "graph_edges",
+    "repos",
 }
 
 # Schema definition. Each statement is idempotent.
@@ -93,6 +94,14 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_graph_edges_src ON graph_edges (src_key)",
     "CREATE INDEX IF NOT EXISTS idx_graph_edges_dst ON graph_edges (dst_key)",
     "CREATE INDEX IF NOT EXISTS idx_commit_files_path ON commit_files (file_path)",
+    # --- Indexed repositories (path lookup for on-demand rule evaluation) ---
+    """
+    CREATE TABLE IF NOT EXISTS repos (
+        name        TEXT PRIMARY KEY,
+        path        TEXT NOT NULL,             -- absolute path on disk
+        indexed_at  TEXT NOT NULL              -- ISO-8601 timestamp
+    )
+    """,
 )
 
 

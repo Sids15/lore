@@ -110,6 +110,8 @@ async def index_repo(repo_path: Path) -> IndexJob:
         conn = sqlite_store.connect(settings.data_path)
         try:
             graph_store.replace_repo_graph(conn, repo_path.name, nodes, edges)
+            # Record the repo's path so architecture rules can be evaluated later.
+            graph_store.upsert_repo(conn, repo_path.name, str(repo_path.resolve()))
         finally:
             conn.close()
 
