@@ -165,3 +165,25 @@ export async function fetchGraph(signal?: AbortSignal): Promise<GraphViz> {
   const response = await fetch(`${sidecarBaseUrl}/graph`, { signal });
   return parseOrThrow<GraphViz>(response, "Fetch graph");
 }
+
+/** An architecture rule violation (a forbidden dependency edge). */
+export interface Violation {
+  rule: string;
+  severity: string;
+  src_file: string;
+  dst_file: string;
+  from_layer: string;
+  to_layer: string;
+}
+
+/** Result of evaluating a repo's architecture rules. */
+export interface ViolationsResponse {
+  configured: boolean;
+  violations: Violation[];
+}
+
+/** Fetch architecture-rule violations for the indexed repo. */
+export async function fetchViolations(signal?: AbortSignal): Promise<ViolationsResponse> {
+  const response = await fetch(`${sidecarBaseUrl}/graph/violations`, { signal });
+  return parseOrThrow<ViolationsResponse>(response, "Fetch violations");
+}

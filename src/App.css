@@ -488,3 +488,77 @@ body,
   color: var(--text-muted);
   font-family: ui-monospace, monospace;
 }
+
+.graph__violations {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.graph__violations-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.graph__example {
+  margin: 0;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0b0d11;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.graph__violations-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.graph__violations-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.graph__sev {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+}
+
+.graph__sev--error {
+  color: #e5484d;
+  background: rgba(229, 72, 77, 0.12);
+}
+
+.graph__sev--warning {
+  color: #e0b341;
+  background: rgba(224, 179, 65, 0.12);
+}
+
+.graph__violations-rule {
+  color: var(--text);
+}
+
+.graph__violations-edge {
+  font-family: ui-monospace, monospace;
+  font-size: 0.74rem;
+}
