@@ -1,3 +1,4 @@
+import { GraphPanel } from "./components/GraphPanel";
 import { IndexPanel } from "./components/IndexPanel";
 import { QueryPanel } from "./components/QueryPanel";
 import { StatusPanel } from "./components/StatusPanel";
@@ -23,6 +24,7 @@ function App() {
         <StatusPanel />
         <IndexPanel />
         <QueryPanel />
+        <GraphPanel />
       </section>
     </main>
   );

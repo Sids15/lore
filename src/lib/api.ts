@@ -136,3 +136,32 @@ export async function askQuestion(
   });
   return parseOrThrow<AnswerResponse>(response, "Ask question");
 }
+
+/** A node in the dependency graph. */
+export interface GraphNode {
+  id: string;
+  label: string;
+  file_path: string;
+  in_degree: number;
+  out_degree: number;
+  in_cycle: boolean;
+}
+
+/** A directed dependency edge (source imports target). */
+export interface GraphLink {
+  source: string;
+  target: string;
+}
+
+/** The dependency graph visualization payload. */
+export interface GraphViz {
+  nodes: GraphNode[];
+  links: GraphLink[];
+  truncated: boolean;
+}
+
+/** Fetch the dependency graph for visualization. */
+export async function fetchGraph(signal?: AbortSignal): Promise<GraphViz> {
+  const response = await fetch(`${sidecarBaseUrl}/graph`, { signal });
+  return parseOrThrow<GraphViz>(response, "Fetch graph");
+}

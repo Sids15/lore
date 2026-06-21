@@ -394,3 +394,97 @@ body,
   font-size: 0.72rem;
   opacity: 0.7;
 }
+
+/* ───────────────────────────── Dependency graph panel ───────────────────────────── */
+
+.graph {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  text-align: left;
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
+}
+
+.graph__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.graph__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.graph__refresh {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #1f2530;
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.graph__refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.graph__canvas {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0b0d11;
+}
+
+.graph__empty,
+.graph__note,
+.graph__error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.graph__error {
+  color: #e5484d;
+}
+
+.graph__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0b0d11;
+}
+
+.graph__detail-file {
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.graph__detail-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.graph__neighbours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.graph__chip {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+}
