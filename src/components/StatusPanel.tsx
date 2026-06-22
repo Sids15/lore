@@ -10,13 +10,12 @@ type SidecarStatus =
   | { kind: "connected"; health: HealthResponse }
   | { kind: "disconnected"; message: string };
 
+type Tone = "loading" | "connected" | "degraded" | "disconnected";
+
 /**
- * Shows the live status of the backend: the sidecar connection, the embedded
- * databases, and the Ollama runtime (including guidance when a model needs to
- * be pulled).
- *
- * Polls `/health` on an interval. The Tauri shell starts the sidecar
- * automatically, so this normally reaches "connected" within a second or two.
+ * Compact backend health badge for the header. Polls `/health` and shows a
+ * colored dot + short label; the full details (DBs, Ollama, pull commands) are
+ * available on hover via the title attribute.
  */
 export function StatusPanel() {
   const [status, setStatus] = useState<SidecarStatus>({ kind: "loading" });
@@ -28,13 +27,9 @@ export function StatusPanel() {
     async function check() {
       try {
         const health = await fetchHealth(controller.signal);
-        if (!cancelled) {
-          setStatus({ kind: "connected", health });
-        }
+        if (!cancelled) setStatus({ kind: "connected", health });
       } catch (error) {
-        if (cancelled || controller.signal.aborted) {
-          return;
-        }
+        if (cancelled || controller.signal.aborted) return;
         const message = error instanceof Error ? error.message : "Unknown error";
         setStatus({ kind: "disconnected", message });
       }
@@ -42,7 +37,6 @@ export function StatusPanel() {
 
     void check();
     const timer = window.setInterval(() => void check(), POLL_INTERVAL_MS);
-
     return () => {
       cancelled = true;
       controller.abort();
@@ -51,61 +45,55 @@ export function StatusPanel() {
   }, []);
 
   return (
-    <div className="status">
-      <div className="status__pill">
-        <span className={`status__dot status__dot--${pillTone(status)}`} aria-hidden />
-        <span className="status__label">{pillLabel(status)}</span>
-      </div>
-      {status.kind === "connected" && <StatusDetails health={status.health} />}
-    </div>
+    <span className="statusbadge" title={detail(status)}>
+      <span className={`statusbadge__dot statusbadge__dot--${tone(status)}`} aria-hidden />
+      {label(status)}
+    </span>
   );
 }
 
-/** Detail rows shown once the sidecar is connected. */
-function StatusDetails({ health }: { health: HealthResponse }) {
+function _ready(health: HealthResponse): boolean {
   const dbReady = health.databases.sqlite && health.databases.lancedb;
-  const ollama = health.ollama;
-
-  return (
-    <ul className="status__details">
-      <li className={dbReady ? "is-ok" : "is-warn"}>
-        Databases: {dbReady ? "ready" : "initializing"}
-      </li>
-      <li className={ollama.reachable && ollama.missing_models.length === 0 ? "is-ok" : "is-warn"}>
-        Ollama: {ollamaSummary(health)}
-      </li>
-      {ollama.reachable &&
-        ollama.missing_models.map((model) => (
-          <li key={model} className="status__hint">
-            Pull model: <code>ollama pull {model}</code>
-          </li>
-        ))}
-    </ul>
-  );
+  const ollamaReady = health.ollama.reachable && health.ollama.missing_models.length === 0;
+  return dbReady && ollamaReady;
 }
 
-function ollamaSummary(health: HealthResponse): string {
-  const { reachable, installed_models, missing_models } = health.ollama;
-  if (!reachable) {
-    return "not running — start Ollama";
-  }
-  if (missing_models.length > 0) {
-    return `running, ${missing_models.length} model(s) missing`;
-  }
-  return `ready (${installed_models.length} model(s))`;
+function tone(status: SidecarStatus): Tone {
+  if (status.kind !== "connected") return status.kind;
+  return _ready(status.health) ? "connected" : "degraded";
 }
 
-function pillTone(status: SidecarStatus): "loading" | "connected" | "disconnected" {
-  return status.kind;
-}
-
-function pillLabel(status: SidecarStatus): string {
+function label(status: SidecarStatus): string {
   switch (status.kind) {
     case "loading":
-      return "Connecting to sidecar…";
-    case "connected":
-      return `Sidecar connected — ${status.health.service} v${status.health.version}`;
+      return "Connecting…";
     case "disconnected":
-      return `Sidecar disconnected (${status.message})`;
+      return "Sidecar offline";
+    case "connected": {
+      const h = status.health;
+      if (!h.ollama.reachable) return "Ollama offline";
+      if (h.ollama.missing_models.length > 0) return "Models missing";
+      if (!(h.databases.sqlite && h.databases.lancedb)) return "DBs initializing";
+      return "Ready";
+    }
+  }
+}
+
+function detail(status: SidecarStatus): string {
+  switch (status.kind) {
+    case "loading":
+      return "Connecting to the sidecar…";
+    case "disconnected":
+      return `Sidecar disconnected: ${status.message}`;
+    case "connected": {
+      const h = status.health;
+      const dbs = `DBs: ${h.databases.sqlite && h.databases.lancedb ? "ready" : "initializing"}`;
+      const ollama = !h.ollama.reachable
+        ? "Ollama: not running"
+        : h.ollama.missing_models.length > 0
+          ? `Ollama: pull ${h.ollama.missing_models.join(", ")}`
+          : `Ollama: ready (${h.ollama.installed_models.length} models)`;
+      return `${h.service} v${h.version} · ${dbs} · ${ollama}`;
+    }
   }
 }
