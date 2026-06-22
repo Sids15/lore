@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     history_max_commits: int = 300  # most-recent commits to summarise/index
     history_table: str = "commit_summaries"  # LanceDB table for commit summaries
 
+    # --- Evaluation (Phase 7) ---
+    eval_k: int = 8  # retrieval recall@k cutoff for the eval harness
+
     # Directory names skipped when walking a repository for source files.
     index_exclude_dirs: list[str] = [
         ".git",
