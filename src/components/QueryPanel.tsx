@@ -74,6 +74,15 @@ export function QueryPanel() {
             >
               {answer.grounded ? "grounded" : "ungrounded"}
             </span>
+            {answer.categories.map((c) => (
+              <span key={c} className="query__tag">
+                {c}
+              </span>
+            ))}
+            {answer.graph_used && <span className="query__tag query__tag--graph">graph</span>}
+            {answer.corrected && (
+              <span className="query__tag query__tag--corrected">self-corrected</span>
+            )}
           </div>
 
           <p className="query__answer-text">{answer.answer}</p>

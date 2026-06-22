@@ -320,6 +320,30 @@ body,
 
 .query__answer-head {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.query__tag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.query__tag--graph {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.query__tag--corrected {
+  color: #b78cff;
+  border-color: #b78cff;
 }
 
 .query__badge {

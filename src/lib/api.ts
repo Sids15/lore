@@ -121,6 +121,9 @@ export interface AnswerResponse {
   sources: Source[];
   grounded: boolean;
   unsupported: string[];
+  categories: string[]; // the router's classification of the question
+  graph_used: boolean; // whether graph context was folded in
+  corrected: boolean; // whether a self-correction retry produced this answer
 }
 
 /** Ask a grounded question about the indexed repository. */
