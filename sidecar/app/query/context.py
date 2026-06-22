@@ -14,6 +14,8 @@ from pydantic import BaseModel
 from app.config import Settings
 from app.db import sqlite_store
 from app.graph import analysis, graph_store
+from app.history import retrieval as history_retrieval
+from app.history.retrieval import CommitHit
 from app.query.router import RouteDecision
 from app.retrieval import hybrid
 from app.retrieval.hybrid import RetrievedChunk
@@ -22,11 +24,12 @@ _GRAPH_SEEDS = 4  # how many top chunks to expand into graph neighbours
 
 
 class RetrievalBundle(BaseModel):
-    """Everything gathered for an answer: code chunks + graph facts."""
+    """Everything gathered for an answer: code chunks + graph facts + commits."""
 
     chunks: list[RetrievedChunk]
     graph_notes: list[str] = []
     graph_used: bool = False
+    commits: list[CommitHit] = []
 
 
 def _short(name: str) -> str:
@@ -104,25 +107,39 @@ async def gather(
     notes: list[str] = []
     if settings.graphrag_enabled and categories & {"relational", "architectural"}:
         notes = _graph_context(chunks, categories, settings)
+
+    commits: list[CommitHit] = []
     if "historical" in route.categories:
-        notes = notes + ["Git-history search is not available yet (coming in a later phase)."]
+        commits = await history_retrieval.search_history(question, settings=settings)
 
     return RetrievalBundle(
         chunks=chunks[: settings.answer_context_k],
         graph_notes=notes,
         graph_used=bool(notes),
+        commits=commits,
     )
 
 
 def format_context(bundle: RetrievalBundle) -> str:
     """Render the bundle into a single prompt context string."""
-    blocks = [
-        f"[{i}] {c.file_path}:{c.start_line}-{c.end_line} ({c.kind} {c.symbol})\n{c.code}"
-        for i, c in enumerate(bundle.chunks, start=1)
-    ]
-    code = "\n\n".join(blocks)
+    sections: list[str] = []
+
+    if bundle.chunks:
+        blocks = [
+            f"[{i}] {c.file_path}:{c.start_line}-{c.end_line} ({c.kind} {c.symbol})\n{c.code}"
+            for i, c in enumerate(bundle.chunks, start=1)
+        ]
+        sections.append("\n\n".join(blocks))
+
     if bundle.graph_notes:
-        related = "\n".join(f"- {n}" for n in bundle.graph_notes)
-        related_block = f"Related (from the code graph):\n{related}"
-        return f"{code}\n\n{related_block}" if code else related_block
-    return code
+        notes = "\n".join(f"- {n}" for n in bundle.graph_notes)
+        sections.append(f"Related (from the code graph):\n{notes}")
+
+    if bundle.commits:
+        lines = "\n".join(
+            f"- {c.sha[:7]} ({c.author}, {c.committed_at[:10]}): {c.summary}"
+            for c in bundle.commits
+        )
+        sections.append(f"Recent history:\n{lines}")
+
+    return "\n\n".join(sections)
