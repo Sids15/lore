@@ -62,6 +62,7 @@ export interface IndexJob {
 /** Aggregate index counts. */
 export interface IndexStats {
   code_chunks: number;
+  commits: number;
 }
 
 async function parseOrThrow<T>(response: Response, action: string): Promise<T> {
@@ -100,6 +101,22 @@ export async function fetchIndexStats(signal?: AbortSignal): Promise<IndexStats>
   return parseOrThrow<IndexStats>(response, "Fetch index stats");
 }
 
+/** Start indexing the repository's git history (reuses the IndexJob shape). */
+export async function startHistoryIndex(path: string): Promise<IndexJob> {
+  const response = await fetch(`${sidecarBaseUrl}/index/history`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return parseOrThrow<IndexJob>(response, "Start history indexing");
+}
+
+/** Fetch the current/last history-indexing job status. */
+export async function fetchHistoryStatus(signal?: AbortSignal): Promise<IndexJob> {
+  const response = await fetch(`${sidecarBaseUrl}/index/history/status`, { signal });
+  return parseOrThrow<IndexJob>(response, "Fetch history status");
+}
+
 /** A retrieved code chunk cited as a source for an answer. */
 export interface Source {
   chunk_id: string;
@@ -115,6 +132,17 @@ export interface Source {
   score: number;
 }
 
+/** A git commit cited as a source for a historical answer. */
+export interface CommitHit {
+  sha: string;
+  author: string;
+  committed_at: string;
+  message: string;
+  summary: string;
+  files: string;
+  score: number;
+}
+
 /** A grounded answer with its sources (mirrors the sidecar AnswerResponse). */
 export interface AnswerResponse {
   answer: string;
@@ -124,6 +152,7 @@ export interface AnswerResponse {
   categories: string[]; // the router's classification of the question
   graph_used: boolean; // whether graph context was folded in
   corrected: boolean; // whether a self-correction retry produced this answer
+  commits: CommitHit[]; // git-history commits cited in the answer
 }
 
 /** Ask a grounded question about the indexed repository. */

@@ -111,6 +111,23 @@ export function QueryPanel() {
               </ul>
             </div>
           )}
+
+          {answer.commits.length > 0 && (
+            <div className="query__sources">
+              <h3 className="query__sources-title">Commits</h3>
+              <ul>
+                {answer.commits.map((c) => (
+                  <li key={c.sha}>
+                    <code>{c.sha.slice(0, 7)}</code>
+                    <span className="query__source-loc">
+                      {c.author} · {c.committed_at.slice(0, 10)}
+                    </span>
+                    <span className="query__source-kind">{c.summary}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </article>
       )}
     </section>
