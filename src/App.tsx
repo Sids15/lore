@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 
+import { EvalPanel } from "./components/EvalPanel";
 import { GraphPanel } from "./components/GraphPanel";
 import { IndexPanel } from "./components/IndexPanel";
 import { QueryPanel } from "./components/QueryPanel";
@@ -48,12 +49,7 @@ function App() {
         <Tab id="ask" view={view}><QueryPanel /></Tab>
         <Tab id="index" view={view}><IndexPanel /></Tab>
         <Tab id="graph" view={view}><GraphPanel /></Tab>
-        <Tab id="eval" view={view}>
-          <p className="placeholder">
-            Run quality evaluations here. Add a <code>.lore/eval.yml</code> to your repo with a
-            few questions, then evaluation metrics will appear in this tab.
-          </p>
-        </Tab>
+        <Tab id="eval" view={view}><EvalPanel /></Tab>
       </main>
 
       <footer className="statusbar">

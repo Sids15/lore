@@ -204,6 +204,50 @@ export async function fetchGraph(
   return parseOrThrow<GraphViz>(response, "Fetch graph");
 }
 
+/** Per-question evaluation result. */
+export interface EvalQuestionResult {
+  question: string;
+  grounded: boolean;
+  recall_hit: boolean | null; // null when the question has no labelled files
+  relevancy: number;
+}
+
+/** Aggregate evaluation report. */
+export interface EvalReport {
+  total: number;
+  faithfulness: number;
+  answer_relevancy: number;
+  recall_at_k: number | null; // null when no question is labelled
+  per_question: EvalQuestionResult[];
+}
+
+/** Live status of an evaluation run (mirrors the sidecar EvalJob). */
+export interface EvalJob {
+  state: "idle" | "running" | "done" | "error";
+  repo: string | null;
+  total: number;
+  processed: number;
+  configured: boolean; // whether a .lore/eval.yml was found
+  message: string | null;
+  report: EvalReport | null;
+}
+
+/** Start an evaluation run against the indexed repo's `.lore/eval.yml`. */
+export async function runEval(): Promise<EvalJob> {
+  const response = await fetch(`${sidecarBaseUrl}/eval/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  return parseOrThrow<EvalJob>(response, "Run evaluation");
+}
+
+/** Fetch the current/last evaluation status (and report, when done). */
+export async function fetchEvalStatus(signal?: AbortSignal): Promise<EvalJob> {
+  const response = await fetch(`${sidecarBaseUrl}/eval/status`, { signal });
+  return parseOrThrow<EvalJob>(response, "Fetch eval status");
+}
+
 /** An architecture rule violation (a forbidden dependency edge). */
 export interface Violation {
   rule: string;
