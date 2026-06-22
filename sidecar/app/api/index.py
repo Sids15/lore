@@ -10,6 +10,9 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.db import lancedb_client
+from app.history import history_index
+from app.history import pipeline as history_pipeline
+from app.history.pipeline import HistoryJob
 from app.index import code_index
 from app.ingest import pipeline
 from app.ingest.pipeline import IndexJob
@@ -27,6 +30,7 @@ class IndexStats(BaseModel):
     """Aggregate counts for the indexes."""
 
     code_chunks: int
+    commits: int
 
 
 @router.post("/code", response_model=IndexJob, status_code=202)
@@ -56,4 +60,24 @@ def index_stats() -> IndexStats:
     """Return aggregate index counts."""
     settings = get_settings()
     db = lancedb_client.connect(settings.data_path)
-    return IndexStats(code_chunks=code_index.count(db))
+    return IndexStats(code_chunks=code_index.count(db), commits=history_index.count(db))
+
+
+@router.post("/history", response_model=HistoryJob, status_code=202)
+async def start_history_index(request: IndexRequest) -> HistoryJob:
+    """Start indexing the repository's git history (one job at a time)."""
+    repo_path = Path(request.path).expanduser()
+    if not repo_path.is_dir():
+        raise HTTPException(status_code=400, detail=f"Not a directory: {request.path}")
+    if history_pipeline.is_running():
+        raise HTTPException(status_code=409, detail="A history indexing job is already running")
+
+    history_pipeline.mark_running(repo_path.name)
+    asyncio.create_task(history_pipeline.index_history(repo_path))
+    return history_pipeline.current_job()
+
+
+@router.get("/history/status", response_model=HistoryJob)
+def history_status() -> HistoryJob:
+    """Return the status of the current/last history-indexing run."""
+    return history_pipeline.current_job()
