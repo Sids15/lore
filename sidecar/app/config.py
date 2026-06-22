@@ -49,7 +49,6 @@ class Settings(BaseSettings):
     ollama_url: str = "http://127.0.0.1:11434"
     generation_model: str = "qwen3:8b"
     embedding_model: str = "nomic-embed-text"
-    reranker_model: str = "bge-reranker-base"
 
     # --- Code Index ingestion (Phase 1) ---
     # Contextual enrichment: prepend an LLM-written situating header per chunk.
@@ -81,7 +80,10 @@ class Settings(BaseSettings):
     self_correct_enabled: bool = True  # one broaden+retry pass on weak answers
     graph_context_neighbours: int = 8  # max graph facts added to the context
     correction_k_multiplier: int = 2  # how much to widen retrieval on a retry
-    rerank_model: str = "BAAI/bge-reranker-base"  # ONNX cross-encoder via fastembed
+    # ONNX cross-encoder reranker (via fastembed). Default is a small, fast model
+    # that loads comfortably alongside the LLM; set LORE_RERANK_MODEL to a larger
+    # one (e.g. "BAAI/bge-reranker-base") if you have the RAM for higher quality.
+    rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
 
     # Where downloaded model files (e.g. the ONNX reranker) are cached. Defaults
     # to a "models" folder under the data dir so it persists across runs and stays
