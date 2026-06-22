@@ -45,10 +45,26 @@ export function StatusPanel() {
   }, []);
 
   return (
-    <span className="statusbadge" title={detail(status)}>
-      <span className={`statusbadge__dot statusbadge__dot--${tone(status)}`} aria-hidden />
-      {label(status)}
-    </span>
+    <div className="statusbar__health" title={detail(status)}>
+      <span className={`statusbar__dot statusbar__dot--${tone(status)}`} aria-hidden />
+      <span className="statusbar__label">{label(status)}</span>
+      {status.kind === "connected" && <StatusSegments health={status.health} />}
+    </div>
+  );
+}
+
+function StatusSegments({ health }: { health: HealthResponse }) {
+  const dbReady = health.databases.sqlite && health.databases.lancedb;
+  const ollama = !health.ollama.reachable
+    ? "ollama: off"
+    : health.ollama.missing_models.length > 0
+      ? `ollama: ${health.ollama.missing_models.length} missing`
+      : `ollama: ${health.ollama.installed_models.length} models`;
+  return (
+    <>
+      <span className="statusbar__seg">db: {dbReady ? "ready" : "init"}</span>
+      <span className="statusbar__seg">{ollama}</span>
+    </>
   );
 }
 
