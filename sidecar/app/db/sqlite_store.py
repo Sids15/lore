@@ -38,7 +38,8 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         committed_at TEXT NOT NULL,           -- ISO-8601 timestamp
         message      TEXT NOT NULL,           -- raw commit message
         summary      TEXT,                    -- LLM summary (this is what gets embedded)
-        raw_diff     TEXT                     -- stored for display, NOT embedded
+        raw_diff     TEXT,                    -- stored for display, NOT embedded
+        repo         TEXT                     -- owning repository
     )
     """,
     """
@@ -52,20 +53,22 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     """,
     """
     CREATE TABLE IF NOT EXISTS blame (
+        repo             TEXT NOT NULL DEFAULT '',
         file_path        TEXT NOT NULL,
         function_name    TEXT NOT NULL,
         last_sha         TEXT,
         last_author      TEXT,
         last_modified_at TEXT,
-        PRIMARY KEY (file_path, function_name)
+        PRIMARY KEY (repo, file_path, function_name)
     )
     """,
     """
     CREATE TABLE IF NOT EXISTS authorship (
+        repo         TEXT NOT NULL DEFAULT '',
         author       TEXT NOT NULL,
         file_path    TEXT NOT NULL,
         commit_count INTEGER NOT NULL DEFAULT 0,
-        PRIMARY KEY (author, file_path)
+        PRIMARY KEY (repo, author, file_path)
     )
     """,
     # --- Graph index (Index A: Layer A static + Layer B semantic) ---
@@ -94,6 +97,7 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_graph_edges_src ON graph_edges (src_key)",
     "CREATE INDEX IF NOT EXISTS idx_graph_edges_dst ON graph_edges (dst_key)",
     "CREATE INDEX IF NOT EXISTS idx_commit_files_path ON commit_files (file_path)",
+    "CREATE INDEX IF NOT EXISTS idx_commits_repo_date ON commits (repo, committed_at)",
     # --- Indexed repositories (path lookup for on-demand rule evaluation) ---
     """
     CREATE TABLE IF NOT EXISTS repos (
@@ -125,9 +129,17 @@ def connect(data_dir: Path) -> sqlite3.Connection:
 
 def _migrate(conn: sqlite3.Connection) -> None:
     """Apply idempotent migrations to upgrade older databases in place."""
-    columns = {row[1] for row in conn.execute("PRAGMA table_info(graph_nodes)")}
-    if "repo" not in columns:
-        conn.execute("ALTER TABLE graph_nodes ADD COLUMN repo TEXT")
+
+    def add_column_if_missing(table: str, column: str, decl: str) -> None:
+        cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+    add_column_if_missing("graph_nodes", "repo", "TEXT")
+    # Phase 6: per-repo scoping for the history tables.
+    add_column_if_missing("commits", "repo", "TEXT")
+    add_column_if_missing("blame", "repo", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing("authorship", "repo", "TEXT NOT NULL DEFAULT ''")
 
 
 def init_schema(data_dir: Path) -> None:

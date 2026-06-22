@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     graph_max_cycles: int = 50  # cap on reported import cycles
     graph_max_nodes: int = 600  # safety cap on nodes sent to the visualization
 
+    # --- Git history index (Phase 6) ---
+    history_max_commits: int = 300  # most-recent commits to summarise/index
+    history_table: str = "commit_summaries"  # LanceDB table for commit summaries
+
     # Directory names skipped when walking a repository for source files.
     index_exclude_dirs: list[str] = [
         ".git",
