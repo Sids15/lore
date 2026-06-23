@@ -113,6 +113,37 @@ cd sidecar && python -m uvicorn app.main:app --reload --port 8765
 
 ---
 
+## Building the installer
+
+Lore ships as a single desktop installer with **no Python required** at runtime — the FastAPI
+sidecar is frozen into a standalone binary with PyInstaller and bundled inside the app.
+
+```bash
+# 1. Freeze the sidecar into a standalone binary (onedir).
+cd sidecar
+./build.ps1                 # creates the venv, installs deps, runs PyInstaller
+                            # → sidecar/dist/lore-sidecar/lore-sidecar.exe
+cd ..
+
+# 2. Build the desktop installer (bundles the sidecar via tauri.conf.json resources).
+npm run tauri build         # → src-tauri/target/release/bundle/
+```
+
+Notes:
+
+- Build the sidecar binary **before** `npm run tauri build` — the Tauri bundle references
+  `sidecar/dist/lore-sidecar`.
+- The installed app stores its indexes under a per-user data directory (not next to the binary).
+- The cross-encoder reranker model is **not** bundled; it downloads once (~90 MB) on first use to
+  the data directory and then runs fully offline.
+- **Ollama is still required at runtime** for the LLM features — the installer bundles Lore, not
+  the language models. Users install Ollama and pull `qwen3:8b` + `nomic-embed-text` (see
+  Prerequisites).
+- In development (`npm run tauri dev`) the bundled binary is absent, so the shell automatically
+  falls back to running the sidecar from the Python virtualenv.
+
+---
+
 ## Project layout
 
 ```
@@ -129,6 +160,15 @@ See [`CLAUDE.md`](./CLAUDE.md) for the development conventions and a deeper map 
 
 ## Status
 
-Under active development, built phase-by-phase per the PRD roadmap. **Phase 0 (foundation)**
-establishes the desktop shell, the sidecar, the embedded data stores, and health monitoring.
-Retrieval, the graph, the agentic router, and git-history intelligence follow in later phases.
+Feature-complete. Built phase-by-phase per the PRD roadmap:
+
+- **Code index** — tree-sitter AST chunking → LLM contextual enrichment → embeddings in LanceDB.
+- **Grounded Q&A** — hybrid retrieval (vector + full-text + RRF) with an ONNX cross-encoder
+  reranker, grounded generation, and a faithfulness check.
+- **Architecture graph** — static dependency graph + LLM semantic graph (calls/inherits),
+  cycle detection, an architecture-rule engine, and a 2D/3D visualization.
+- **Agentic router** — classifies each question and adapts retrieval (GraphRAG, history), with a
+  self-correction retry on weak answers.
+- **Git history index** — commit summaries (embedded), function-level blame, and authorship.
+- **Evaluation** — a local harness reporting retrieval recall, faithfulness, and answer relevancy.
+- **Packaging** — PyInstaller-frozen sidecar bundled into the Tauri installer (no Python needed).
