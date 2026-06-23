@@ -10,6 +10,8 @@ flaky check never blocks a useful response.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import httpx
 from pydantic import BaseModel
 
@@ -163,3 +165,143 @@ async def answer_question(
                 result = retry
 
     return result
+
+
+# --- Streaming variant --------------------------------------------------------
+#
+# Emits the same answer as `answer_question`, but as a sequence of NDJSON events
+# (see the protocol below) so the UI can render tokens as they arrive. The
+# retrieval/grounding stack is reused unchanged; only generation is streamed.
+#
+#   meta    -> {categories, graph_used, sources, commits, docs}  (before tokens)
+#   status  -> {stage: "generating"|"verifying"|"refining"}
+#   token   -> {text}                                            (answer delta)
+#   replace -> {}                  (self-correction restarts the answer)
+#   final   -> {grounded, unsupported, corrected}               (terminal)
+
+
+def _meta_event(route: "router.RouteDecision", bundle: context.RetrievalBundle) -> dict:
+    """Build the early `meta` event: tags + sources the UI can show immediately."""
+    return {
+        "type": "meta",
+        "categories": route.categories,
+        "graph_used": bundle.graph_used,
+        "sources": [c.model_dump() for c in bundle.chunks],
+        "commits": [c.model_dump() for c in bundle.commits],
+        "docs": [d.model_dump() for d in bundle.docs],
+    }
+
+
+async def _stream_and_ground(
+    question: str,
+    bundle: context.RetrievalBundle,
+    route: "router.RouteDecision",
+    settings: Settings,
+    result: dict,
+) -> AsyncIterator[dict]:
+    """Stream meta + answer tokens for one pass, then ground into ``result``.
+
+    Yields the public events for the pass (meta, status, token) but not the
+    terminal ``final`` — the caller emits that after deciding on self-correction.
+    The grounding outcome is written to ``result`` (keys: grounded, unsupported).
+    """
+    yield _meta_event(route, bundle)
+    yield {"type": "status", "stage": "generating"}
+
+    context_text = context.format_context(bundle)
+    prompt = f"Context snippets:\n\n{context_text}\n\nQuestion: {question}\n\nAnswer:"
+    parts: list[str] = []
+    async for delta in ollama_client.generate_stream(
+        settings.ollama_url, settings.generation_model, prompt, system=_ANSWER_SYSTEM
+    ):
+        parts.append(delta)
+        yield {"type": "token", "text": delta}
+
+    grounded, unsupported = True, []
+    if settings.grounding_enabled:
+        yield {"type": "status", "stage": "verifying"}
+        grounded, unsupported = await _check_grounding("".join(parts), context_text, settings)
+    result["grounded"] = grounded
+    result["unsupported"] = unsupported
+
+
+def _final(grounded: bool, unsupported: list[str], corrected: bool) -> dict:
+    return {
+        "type": "final",
+        "grounded": grounded,
+        "unsupported": unsupported,
+        "corrected": corrected,
+    }
+
+
+def _empty_meta(route: "router.RouteDecision") -> dict:
+    return {
+        "type": "meta",
+        "categories": route.categories,
+        "graph_used": False,
+        "sources": [],
+        "commits": [],
+        "docs": [],
+    }
+
+
+async def answer_question_stream(
+    question: str,
+    *,
+    k: int | None = None,
+    settings: Settings | None = None,
+) -> AsyncIterator[dict]:
+    """Answer a question as a stream of NDJSON events (see protocol above)."""
+    settings = settings or get_settings()
+    route = await router.classify(question, settings)
+
+    # Trivial: no retrieval — stream a short reply directly.
+    if route.trivial:
+        yield _empty_meta(route)
+        yield {"type": "status", "stage": "generating"}
+        async for delta in ollama_client.generate_stream(
+            settings.ollama_url, settings.generation_model, question, system=_TRIVIAL_SYSTEM
+        ):
+            yield {"type": "token", "text": delta}
+        yield _final(True, [], False)
+        return
+
+    bundle = await context.gather(question, route, settings, k=k)
+    had_context = bool(bundle.chunks or bundle.graph_notes or bundle.commits or bundle.docs)
+
+    # Nothing retrieved: try one broaden pass, else emit the canned message.
+    if not had_context:
+        broadened = (
+            await context.gather(question, route, settings, k=k, broaden=True)
+            if settings.self_correct_enabled
+            else None
+        )
+        if broadened and (broadened.chunks or broadened.graph_notes or broadened.docs):
+            res: dict = {}
+            async for event in _stream_and_ground(question, broadened, route, settings, res):
+                yield event
+            yield _final(res["grounded"], res["unsupported"], True)
+            return
+        yield _empty_meta(route)
+        yield {"type": "token", "text": _NO_CONTEXT_ANSWER}
+        yield _final(True, [], False)
+        return
+
+    # First pass.
+    first: dict = {}
+    async for event in _stream_and_ground(question, bundle, route, settings, first):
+        yield event
+
+    # Self-correction: one broaden+retry when the first answer is ungrounded.
+    if settings.self_correct_enabled and not first["grounded"]:
+        broadened = await context.gather(question, route, settings, k=k, broaden=True)
+        if broadened.chunks or broadened.graph_notes or broadened.docs:
+            yield {"type": "status", "stage": "refining"}
+            yield {"type": "replace"}
+            second: dict = {}
+            async for event in _stream_and_ground(question, broadened, route, settings, second):
+                yield event
+            yield _final(second["grounded"], second["unsupported"], True)
+            return
+
+    yield _final(first["grounded"], first["unsupported"], False)
