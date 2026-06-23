@@ -98,6 +98,14 @@ class Settings(BaseSettings):
     history_max_commits: int = 300  # most-recent commits to summarise/index
     history_table: str = "commit_summaries"  # LanceDB table for commit summaries
 
+    # --- Docs index (Phase 9, Index C) ---
+    # Recursive text-splitter sizing for markdown/text docs. No LLM enrichment:
+    # prose is embedded directly, so indexing is fast.
+    doc_chunk_chars: int = 1200  # target characters per doc chunk
+    doc_chunk_overlap: int = 150  # characters carried between adjacent chunks
+    doc_table: str = "doc_chunks"  # LanceDB table for documentation chunks
+    doc_extensions: list[str] = [".md", ".markdown", ".mdx", ".txt", ".rst"]
+
     # --- Evaluation (Phase 7) ---
     eval_k: int = 8  # retrieval recall@k cutoff for the eval harness
 
