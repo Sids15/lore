@@ -10,10 +10,12 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.db import lancedb_client
+from app.docs import pipeline as docs_pipeline
+from app.docs.pipeline import DocsJob
 from app.history import history_index
 from app.history import pipeline as history_pipeline
 from app.history.pipeline import HistoryJob
-from app.index import code_index
+from app.index import code_index, docs_index
 from app.ingest import pipeline
 from app.ingest.pipeline import IndexJob
 
@@ -31,6 +33,7 @@ class IndexStats(BaseModel):
 
     code_chunks: int
     commits: int
+    doc_chunks: int
 
 
 @router.post("/code", response_model=IndexJob, status_code=202)
@@ -60,7 +63,11 @@ def index_stats() -> IndexStats:
     """Return aggregate index counts."""
     settings = get_settings()
     db = lancedb_client.connect(settings.data_path)
-    return IndexStats(code_chunks=code_index.count(db), commits=history_index.count(db))
+    return IndexStats(
+        code_chunks=code_index.count(db),
+        commits=history_index.count(db),
+        doc_chunks=docs_index.count(db),
+    )
 
 
 @router.post("/history", response_model=HistoryJob, status_code=202)
@@ -81,3 +88,23 @@ async def start_history_index(request: IndexRequest) -> HistoryJob:
 def history_status() -> HistoryJob:
     """Return the status of the current/last history-indexing run."""
     return history_pipeline.current_job()
+
+
+@router.post("/docs", response_model=DocsJob, status_code=202)
+async def start_docs_index(request: IndexRequest) -> DocsJob:
+    """Start indexing the repository's documentation (one job at a time)."""
+    repo_path = Path(request.path).expanduser()
+    if not repo_path.is_dir():
+        raise HTTPException(status_code=400, detail=f"Not a directory: {request.path}")
+    if docs_pipeline.is_running():
+        raise HTTPException(status_code=409, detail="A docs indexing job is already running")
+
+    docs_pipeline.mark_running(repo_path.name)
+    asyncio.create_task(docs_pipeline.index_docs(repo_path))
+    return docs_pipeline.current_job()
+
+
+@router.get("/docs/status", response_model=DocsJob)
+def docs_status() -> DocsJob:
+    """Return the status of the current/last docs-indexing run."""
+    return docs_pipeline.current_job()
