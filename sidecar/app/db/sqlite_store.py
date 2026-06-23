@@ -25,6 +25,7 @@ EXPECTED_TABLES = {
     "graph_nodes",
     "graph_edges",
     "repos",
+    "file_index",
 }
 
 # Schema definition. Each statement is idempotent.
@@ -104,6 +105,16 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         name        TEXT PRIMARY KEY,
         path        TEXT NOT NULL,             -- absolute path on disk
         indexed_at  TEXT NOT NULL              -- ISO-8601 timestamp
+    )
+    """,
+    # --- Incremental indexing: per-file content hashes (change detection) ---
+    """
+    CREATE TABLE IF NOT EXISTS file_index (
+        repo         TEXT NOT NULL,
+        file_path    TEXT NOT NULL,            -- POSIX, relative to the repo root
+        content_hash TEXT NOT NULL,            -- SHA-256 of the file bytes
+        indexed_at   TEXT NOT NULL,            -- ISO-8601 timestamp
+        PRIMARY KEY (repo, file_path)
     )
     """,
 )
