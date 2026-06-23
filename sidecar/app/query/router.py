@@ -7,6 +7,7 @@ can pick the right tools:
 * ``relational``   — calls/callers/uses (semantic graph neighbours).
 * ``architectural``— dependencies, cycles, layering (static graph + analysis).
 * ``historical``   — git history / authorship (served in a later phase).
+* ``docs``         — answered by documentation / READMEs / guides (docs index).
 * ``trivial``      — greetings/meta; no retrieval needed.
 
 Classification is best-effort: any failure (router disabled, LLM error, bad
@@ -22,17 +23,18 @@ from app.config import Settings
 from app.llm import ollama_client
 from app.llm.parsing import parse_json_object
 
-VALID_CATEGORIES = {"code", "relational", "architectural", "historical", "trivial"}
+VALID_CATEGORIES = {"code", "relational", "architectural", "historical", "docs", "trivial"}
 _DEFAULT = ["code"]
 
 _SYSTEM = (
     "You are a query router for a codebase assistant. Classify the user's question "
     "into one or more categories and respond with ONLY a JSON object: "
     '{"categories": [<one or more of "code","relational","architectural",'
-    '"historical","trivial">], "reasoning": "<one short sentence>"}. '
+    '"historical","docs","trivial">], "reasoning": "<one short sentence>"}. '
     "Use 'code' to find/explain specific code; 'relational' for what calls/uses what; "
     "'architectural' for dependencies, cycles, or layering; 'historical' for git "
-    "history/authorship; 'trivial' for greetings or meta questions needing no code."
+    "history/authorship; 'docs' for questions answered by documentation, READMEs, or "
+    "guides; 'trivial' for greetings or meta questions needing no code."
 )
 
 

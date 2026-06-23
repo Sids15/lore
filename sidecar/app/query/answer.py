@@ -14,6 +14,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.config import Settings, get_settings
+from app.docs.retrieval import DocHit
 from app.history.retrieval import CommitHit
 from app.llm import ollama_client
 from app.llm.parsing import parse_json_object
@@ -55,6 +56,7 @@ class AnswerResponse(BaseModel):
     graph_used: bool = False  # whether graph context was folded in
     corrected: bool = False  # whether a self-correction retry produced this answer
     commits: list[CommitHit] = []  # git-history commits cited in the answer
+    docs: list[DocHit] = []  # documentation chunks cited in the answer
 
 
 async def _check_grounding(
@@ -98,7 +100,7 @@ async def _answer_from_bundle(
     corrected: bool,
 ) -> AnswerResponse:
     """Generate + ground an answer from a gathered context bundle."""
-    if not bundle.chunks and not bundle.graph_notes and not bundle.commits:
+    if not bundle.chunks and not bundle.graph_notes and not bundle.commits and not bundle.docs:
         return AnswerResponse(
             answer=_NO_CONTEXT_ANSWER,
             sources=[],
@@ -123,6 +125,7 @@ async def _answer_from_bundle(
         graph_used=bundle.graph_used,
         corrected=corrected,
         commits=bundle.commits,
+        docs=bundle.docs,
     )
 
 
@@ -145,13 +148,13 @@ async def answer_question(
         )
 
     bundle = await context.gather(question, route, settings, k=k)
-    had_context = bool(bundle.chunks or bundle.graph_notes or bundle.commits)
+    had_context = bool(bundle.chunks or bundle.graph_notes or bundle.commits or bundle.docs)
     result = await _answer_from_bundle(question, bundle, route, settings, corrected=False)
 
     # Self-correction: one broaden+retry pass when the answer is weak.
     if settings.self_correct_enabled and (not had_context or not result.grounded):
         broadened = await context.gather(question, route, settings, k=k, broaden=True)
-        if broadened.chunks or broadened.graph_notes:
+        if broadened.chunks or broadened.graph_notes or broadened.docs:
             retry = await _answer_from_bundle(
                 question, broadened, route, settings, corrected=True
             )

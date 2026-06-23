@@ -13,6 +13,8 @@ from pydantic import BaseModel
 
 from app.config import Settings
 from app.db import sqlite_store
+from app.docs import retrieval as docs_retrieval
+from app.docs.retrieval import DocHit
 from app.graph import analysis, graph_store
 from app.history import retrieval as history_retrieval
 from app.history.retrieval import CommitHit
@@ -24,12 +26,13 @@ _GRAPH_SEEDS = 4  # how many top chunks to expand into graph neighbours
 
 
 class RetrievalBundle(BaseModel):
-    """Everything gathered for an answer: code chunks + graph facts + commits."""
+    """Everything gathered for an answer: code + graph facts + commits + docs."""
 
     chunks: list[RetrievedChunk]
     graph_notes: list[str] = []
     graph_used: bool = False
     commits: list[CommitHit] = []
+    docs: list[DocHit] = []
 
 
 def _short(name: str) -> str:
@@ -101,8 +104,8 @@ async def gather(
     chunks = await hybrid.retrieve(question, k=effective_k, settings=settings)
 
     categories = set(route.categories)
-    if broaden:  # a correction pass casts a wider net, including the graph
-        categories |= {"relational", "architectural"}
+    if broaden:  # a correction pass casts a wider net, incl. the graph and docs
+        categories |= {"relational", "architectural", "docs"}
 
     notes: list[str] = []
     if settings.graphrag_enabled and categories & {"relational", "architectural"}:
@@ -112,11 +115,16 @@ async def gather(
     if "historical" in route.categories:
         commits = await history_retrieval.search_history(question, settings=settings)
 
+    docs: list[DocHit] = []
+    if "docs" in categories:
+        docs = await docs_retrieval.search_docs(question, settings=settings)
+
     return RetrievalBundle(
         chunks=chunks[: settings.answer_context_k],
         graph_notes=notes,
         graph_used=bool(notes),
         commits=commits,
+        docs=docs[: settings.answer_context_k],
     )
 
 
@@ -141,5 +149,13 @@ def format_context(bundle: RetrievalBundle) -> str:
             for c in bundle.commits
         )
         sections.append(f"Recent history:\n{lines}")
+
+    if bundle.docs:
+        blocks = []
+        for doc in bundle.docs:
+            loc = f"{doc.file_path}:{doc.start_line}-{doc.end_line}"
+            label = f"{loc} ({doc.heading})" if doc.heading else loc
+            blocks.append(f"[{label}]\n{doc.text}")
+        sections.append("From the documentation:\n" + "\n\n".join(blocks))
 
     return "\n\n".join(sections)

@@ -104,3 +104,56 @@ def test_format_context_includes_graph_section():
     text = context.format_context(bundle)
     assert "Related (from the code graph)" in text
     assert "a calls b" in text
+
+
+def _doc_hit(heading: str = "Setup") -> "context.DocHit":
+    return context.DocHit(
+        chunk_id="d1",
+        file_path="README.md",
+        heading=heading,
+        start_line=1,
+        end_line=4,
+        text="Install the dependencies first.",
+        score=1.0,
+    )
+
+
+def test_docs_route_pulls_doc_hits(monkeypatch, tmp_path):
+    data = tmp_path / "data"
+    _seed(data)
+    _patch_retrieve(monkeypatch, [])
+
+    async def fake_search_docs(question, *, k=None, settings=None):
+        return [_doc_hit()]
+
+    monkeypatch.setattr(context.docs_retrieval, "search_docs", fake_search_docs)
+
+    bundle = asyncio.run(
+        context.gather("how do I install?", RouteDecision(categories=["docs"]), Settings(data_dir=data))
+    )
+    assert len(bundle.docs) == 1
+    assert bundle.docs[0].file_path == "README.md"
+
+
+def test_code_route_skips_docs(monkeypatch, tmp_path):
+    data = tmp_path / "data"
+    _seed(data)
+    _patch_retrieve(monkeypatch, [_chunk("m.py::a", "a")])
+
+    async def fail_search_docs(*args, **kwargs):
+        raise AssertionError("docs search should not run for a code-only route")
+
+    monkeypatch.setattr(context.docs_retrieval, "search_docs", fail_search_docs)
+
+    bundle = asyncio.run(
+        context.gather("where is a?", RouteDecision(categories=["code"]), Settings(data_dir=data))
+    )
+    assert bundle.docs == []
+
+
+def test_format_context_includes_docs_section():
+    bundle = context.RetrievalBundle(chunks=[], docs=[_doc_hit("Setup > Linux")])
+    text = context.format_context(bundle)
+    assert "From the documentation" in text
+    assert "README.md:1-4" in text
+    assert "Setup > Linux" in text

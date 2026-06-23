@@ -35,6 +35,16 @@ def test_invalid_categories_fall_back(monkeypatch):
     assert decision.categories == ["code"]
 
 
+def test_docs_category_is_recognized(monkeypatch):
+    async def fake_generate(*args, **kwargs):
+        return '{"categories": ["docs"], "reasoning": "answered by the README"}'
+
+    monkeypatch.setattr(router.ollama_client, "generate", fake_generate)
+    decision = asyncio.run(router.classify("how do I build the installer?", Settings()))
+    assert decision.categories == ["docs"]
+    assert decision.trivial is False
+
+
 def test_trivial_is_normalized_alone(monkeypatch):
     async def fake_generate(*args, **kwargs):
         return '{"categories": ["trivial", "code"]}'
