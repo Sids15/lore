@@ -8,13 +8,67 @@ phases that use them.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
+from collections.abc import AsyncIterator
 
 import httpx
 from pydantic import BaseModel
 
 # Defensive cleanup: some "thinking" models can emit <think>…</think> blocks.
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+class _ThinkStripper:
+    """Strip ``<think>…</think>`` spans from a streamed token sequence.
+
+    ``generate`` strips these with a regex over the whole response, but a stream
+    delivers text in arbitrary pieces, so a tag can straddle two deltas. This
+    stateful filter holds back a short tail that could be a partial tag and only
+    emits text known to be outside a think block. ``think=False`` normally
+    prevents these blocks, but reasoning models can still emit them.
+    """
+
+    _OPEN = "<think>"
+    _CLOSE = "</think>"
+    _KEEP = len("</think>") - 1  # longest partial tag we might need to hold back
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._in_think = False
+
+    def feed(self, delta: str) -> str:
+        """Add a delta and return the text safe to emit now."""
+        self._buf += delta
+        out: list[str] = []
+        while True:
+            if self._in_think:
+                idx = self._buf.find(self._CLOSE)
+                if idx == -1:
+                    # Drop think content but keep a possible partial close tag.
+                    self._buf = self._buf[-self._KEEP :]
+                    break
+                self._buf = self._buf[idx + len(self._CLOSE) :]
+                self._in_think = False
+            else:
+                idx = self._buf.find(self._OPEN)
+                if idx == -1:
+                    # Emit all but a possible partial open tag at the tail.
+                    if len(self._buf) > self._KEEP:
+                        out.append(self._buf[: -self._KEEP])
+                        self._buf = self._buf[-self._KEEP :]
+                    break
+                out.append(self._buf[:idx])
+                self._buf = self._buf[idx + len(self._OPEN) :]
+                self._in_think = True
+        return "".join(out)
+
+    def flush(self) -> str:
+        """Return any trailing buffered text (only if outside a think block)."""
+        if self._in_think:
+            return ""
+        out, self._buf = self._buf, ""
+        return out
 
 
 class OllamaStatus(BaseModel):
@@ -107,6 +161,55 @@ async def generate(
         data = response.json()
 
     return _THINK_BLOCK.sub("", data.get("response", "")).strip()
+
+
+async def generate_stream(
+    base_url: str,
+    model: str,
+    prompt: str,
+    *,
+    system: str | None = None,
+    timeout: float = 120.0,
+    think: bool = False,
+) -> AsyncIterator[str]:
+    """Stream generated text token-by-token via Ollama's ``/api/generate``.
+
+    Yields incremental answer deltas (already stripped of ``<think>`` spans) as
+    they arrive. Raises ``httpx.HTTPError`` on transport/HTTP failure so callers
+    can surface it.
+    """
+    url = f"{base_url.rstrip('/')}/api/generate"
+    payload: dict[str, object] = {
+        "model": model,
+        "prompt": prompt,
+        "stream": True,
+        "think": think,
+    }
+    if system:
+        payload["system"] = system
+
+    stripper = _ThinkStripper()
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        async with client.stream("POST", url, json=payload) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                except ValueError:
+                    continue  # skip a malformed line rather than abort the stream
+                piece = data.get("response", "")
+                if piece:
+                    text = stripper.feed(piece)
+                    if text:
+                        yield text
+                if data.get("done"):
+                    break
+
+    tail = stripper.flush()
+    if tail:
+        yield tail
 
 
 async def embed_batch(
