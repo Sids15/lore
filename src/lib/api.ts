@@ -198,6 +198,109 @@ export async function askQuestion(
   return parseOrThrow<AnswerResponse>(response, "Ask question");
 }
 
+// --- Streaming answers (NDJSON over /query/stream) ----------------------------
+
+/** Early event carrying the query classification and the retrieved sources. */
+export interface MetaEvent {
+  categories: string[];
+  graph_used: boolean;
+  sources: Source[];
+  commits: CommitHit[];
+  docs: DocHit[];
+}
+
+/** Terminal event with the grounding outcome. */
+export interface FinalEvent {
+  grounded: boolean;
+  unsupported: string[];
+  corrected: boolean;
+}
+
+/** Callbacks invoked as the answer streams in. All are optional. */
+export interface StreamHandlers {
+  onMeta?: (event: MetaEvent) => void;
+  onToken?: (text: string) => void;
+  onStatus?: (stage: string) => void;
+  onReplace?: () => void;
+  onFinal?: (event: FinalEvent) => void;
+  onError?: (detail: string) => void;
+}
+
+type StreamEvent =
+  | ({ type: "meta" } & MetaEvent)
+  | { type: "token"; text: string }
+  | { type: "status"; stage: string }
+  | { type: "replace" }
+  | ({ type: "final" } & FinalEvent)
+  | { type: "error"; detail: string };
+
+function dispatchStreamEvent(event: StreamEvent, handlers: StreamHandlers): void {
+  switch (event.type) {
+    case "meta":
+      handlers.onMeta?.(event);
+      break;
+    case "token":
+      handlers.onToken?.(event.text);
+      break;
+    case "status":
+      handlers.onStatus?.(event.stage);
+      break;
+    case "replace":
+      handlers.onReplace?.();
+      break;
+    case "final":
+      handlers.onFinal?.(event);
+      break;
+    case "error":
+      handlers.onError?.(event.detail);
+      break;
+  }
+}
+
+/**
+ * Ask a question and stream the answer as it is generated.
+ *
+ * Reads the NDJSON event stream from `/query/stream` and dispatches each event
+ * to the provided handlers. Resolves when the stream ends; rejects on a network
+ * error (an aborted request surfaces as an `AbortError`).
+ */
+export async function askQuestionStream(
+  question: string,
+  handlers: StreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`${sidecarBaseUrl}/query/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Ask question failed: HTTP ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const flushLine = (line: string) => {
+    const trimmed = line.trim();
+    if (trimmed) dispatchStreamEvent(JSON.parse(trimmed) as StreamEvent, handlers);
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline: number;
+    while ((newline = buffer.indexOf("\n")) >= 0) {
+      flushLine(buffer.slice(0, newline));
+      buffer = buffer.slice(newline + 1);
+    }
+  }
+  flushLine(buffer); // any trailing line without a newline
+}
+
 /** A node in the dependency graph. */
 export interface GraphNode {
   id: string;

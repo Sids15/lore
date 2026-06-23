@@ -483,6 +483,56 @@ body,
   color: var(--text);
 }
 
+/* Ask / Stop controls + streaming affordances. */
+.query__controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.query__btn--stop {
+  border: 1px solid var(--rust);
+  background: transparent;
+  color: var(--rust);
+}
+
+.query__btn--stop:hover {
+  background: var(--rust-dim);
+}
+
+.query__badge--stream {
+  color: var(--brass);
+  border-color: var(--brass);
+  background: var(--brass-dim, rgba(217, 162, 74, 0.13));
+}
+
+.query__latency {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* When a latency badge is present, the copy button no longer needs the auto
+   margin (the latency takes it); keep them adjacent. */
+.query__latency + .query__copy {
+  margin-left: 0.4rem;
+}
+
+/* Blinking cursor while the answer streams in. */
+.query__cursor {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--brass);
+  animation: query-blink 1s steps(2, start) infinite;
+}
+
+@keyframes query-blink {
+  to {
+    opacity: 0;
+  }
+}
+
 .query__answer-md {
   font-size: 0.95rem;
   line-height: 1.6;

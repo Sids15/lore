@@ -1,50 +1,128 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { askQuestion, type AnswerResponse } from "../lib/api";
+import { askQuestionStream, type AnswerResponse } from "../lib/api";
 
 interface QaEntry {
   id: string;
   question: string;
   answer: AnswerResponse;
+  status?: string; // live stage while streaming (generating/verifying/refining)
+  latencyMs?: number; // wall-clock duration once the stream finishes
+}
+
+/** A fresh, empty answer to fill in as the stream arrives. */
+const EMPTY_ANSWER: AnswerResponse = {
+  answer: "",
+  sources: [],
+  grounded: true,
+  unsupported: [],
+  categories: [],
+  graph_used: false,
+  corrected: false,
+  commits: [],
+  docs: [],
+};
+
+function formatMs(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
 /**
- * Ask natural-language questions about the indexed repository. Answers render as
- * Markdown, with a faithfulness badge, query-type tags, sources/commits, and a
- * copy button — kept as a scrollable history (newest first).
+ * Ask natural-language questions about the indexed repository. The answer streams
+ * in token-by-token (with a Stop button and a latency readout); each result is a
+ * Markdown card with a faithfulness badge, query-type tags, and sources/commits/docs,
+ * kept as a scrollable history (newest first).
  */
 export function QueryPanel() {
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<QaEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0); // drives the live latency readout
   const controllerRef = useRef<AbortController | null>(null);
+  const startedRef = useRef<number>(0);
+
+  // While a stream is in flight, re-render a few times a second so the elapsed
+  // latency updates.
+  useEffect(() => {
+    if (!streamingId) return;
+    const timer = window.setInterval(() => setTick(performance.now()), 100);
+    return () => window.clearInterval(timer);
+  }, [streamingId]);
+
+  const patch = useCallback((id: string, fn: (entry: QaEntry) => QaEntry) => {
+    setHistory((prev) => prev.map((e) => (e.id === id ? fn(e) : e)));
+  }, []);
 
   const ask = useCallback(async () => {
     const q = question.trim();
-    if (!q || loading) return;
+    if (!q || streamingId) return;
 
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
 
-    setLoading(true);
+    const id = crypto.randomUUID();
+    setHistory((prev) => [{ id, question: q, answer: { ...EMPTY_ANSWER }, status: "generating" }, ...prev]);
+    setQuestion("");
     setError(null);
+    setStreamingId(id);
+    startedRef.current = performance.now();
+    setTick(startedRef.current);
+
     try {
-      const answer = await askQuestion(q, controller.signal);
-      const entry: QaEntry = { id: crypto.randomUUID(), question: q, answer };
-      setHistory((prev) => [entry, ...prev]);
-      setQuestion("");
+      await askQuestionStream(
+        q,
+        {
+          onMeta: (m) =>
+            patch(id, (e) => ({
+              ...e,
+              answer: {
+                ...e.answer,
+                categories: m.categories,
+                graph_used: m.graph_used,
+                sources: m.sources,
+                commits: m.commits,
+                docs: m.docs,
+              },
+            })),
+          onToken: (text) =>
+            patch(id, (e) => ({ ...e, answer: { ...e.answer, answer: e.answer.answer + text } })),
+          onStatus: (stage) => patch(id, (e) => ({ ...e, status: stage })),
+          onReplace: () => patch(id, (e) => ({ ...e, answer: { ...e.answer, answer: "" } })),
+          onFinal: (f) =>
+            patch(id, (e) => ({
+              ...e,
+              status: undefined,
+              answer: {
+                ...e.answer,
+                grounded: f.grounded,
+                unsupported: f.unsupported,
+                corrected: f.corrected,
+              },
+            })),
+          onError: (detail) => setError(detail),
+        },
+        controller.signal,
+      );
     } catch (err) {
       if (!controller.signal.aborted) {
         setError(err instanceof Error ? err.message : "Failed to get an answer");
       }
     } finally {
-      if (controllerRef.current === controller) setLoading(false);
+      if (controllerRef.current === controller) {
+        const ms = Math.round(performance.now() - startedRef.current);
+        patch(id, (e) => ({ ...e, status: undefined, latencyMs: ms }));
+        setStreamingId(null);
+      }
     }
-  }, [question, loading]);
+  }, [question, streamingId, patch]);
+
+  const stop = useCallback(() => {
+    controllerRef.current?.abort();
+  }, []);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Submit on Enter; allow Shift+Enter for a newline.
@@ -65,28 +143,57 @@ export function QueryPanel() {
         onKeyDown={onKeyDown}
         placeholder="Ask a question about the indexed code… (Enter to send, Shift+Enter for newline)"
         rows={3}
-        disabled={loading}
+        disabled={streamingId !== null}
       />
-      <button
-        className="query__btn"
-        onClick={() => void ask()}
-        disabled={loading || question.trim() === ""}
-      >
-        {loading ? "Thinking…" : "Ask"}
-      </button>
+
+      <div className="query__controls">
+        <button
+          className="query__btn"
+          onClick={() => void ask()}
+          disabled={streamingId !== null || question.trim() === ""}
+        >
+          {streamingId ? "Streaming…" : "Ask"}
+        </button>
+        {streamingId && (
+          <button className="query__btn query__btn--stop" onClick={stop}>
+            Stop
+          </button>
+        )}
+      </div>
 
       {error && <p className="query__error">{error}</p>}
 
       <div className="query__history">
-        {history.map((entry) => (
-          <AnswerCard key={entry.id} entry={entry} />
-        ))}
+        {history.map((entry) => {
+          const streaming = entry.id === streamingId;
+          const latencyLabel = streaming
+            ? formatMs(tick - startedRef.current)
+            : entry.latencyMs != null
+              ? formatMs(entry.latencyMs)
+              : null;
+          return (
+            <AnswerCard
+              key={entry.id}
+              entry={entry}
+              streaming={streaming}
+              latencyLabel={latencyLabel}
+            />
+          );
+        })}
       </div>
     </section>
   );
 }
 
-function AnswerCard({ entry }: { entry: QaEntry }) {
+function AnswerCard({
+  entry,
+  streaming,
+  latencyLabel,
+}: {
+  entry: QaEntry;
+  streaming: boolean;
+  latencyLabel: string | null;
+}) {
   const { question, answer } = entry;
   const [copied, setCopied] = useState(false);
 
@@ -105,9 +212,13 @@ function AnswerCard({ entry }: { entry: QaEntry }) {
       <p className="query__question">{question}</p>
 
       <div className="query__answer-head">
-        <span className={`query__badge query__badge--${answer.grounded ? "ok" : "warn"}`}>
-          {answer.grounded ? "grounded" : "ungrounded"}
-        </span>
+        {streaming ? (
+          <span className="query__badge query__badge--stream">{entry.status ?? "generating"}…</span>
+        ) : (
+          <span className={`query__badge query__badge--${answer.grounded ? "ok" : "warn"}`}>
+            {answer.grounded ? "grounded" : "ungrounded"}
+          </span>
+        )}
         {answer.categories.map((c) => (
           <span key={c} className="query__tag">{c}</span>
         ))}
@@ -115,13 +226,17 @@ function AnswerCard({ entry }: { entry: QaEntry }) {
         {answer.corrected && (
           <span className="query__tag query__tag--corrected">self-corrected</span>
         )}
-        <button className="query__copy" onClick={() => void copy()}>
-          {copied ? "Copied" : "Copy"}
-        </button>
+        {latencyLabel && <span className="query__latency">{latencyLabel}</span>}
+        {!streaming && (
+          <button className="query__copy" onClick={() => void copy()}>
+            {copied ? "Copied" : "Copy"}
+          </button>
+        )}
       </div>
 
       <div className="query__answer-md">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer.answer}</ReactMarkdown>
+        {streaming && <span className="query__cursor">▍</span>}
       </div>
 
       {!answer.grounded && answer.unsupported.length > 0 && (
