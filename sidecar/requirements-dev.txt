@@ -1,4 +1,5 @@
-# Development-only dependencies (tests, linting). Not shipped with the app.
+# Development-only dependencies (tests, linting, packaging). Not shipped with the app.
 -r requirements.txt
 
 pytest>=8.0
+pyinstaller>=6.0

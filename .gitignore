@@ -31,6 +31,9 @@ env/
 *.egg-info/
 build/
 dist-py/
+# PyInstaller packaging artifacts (sidecar/build and sidecar/dist are covered by
+# the build/ and dist/ rules above; listed here for clarity).
+*.spec.bak
 
 # ───────────────────────────── Runtime data (databases / indexes) ─────────────────────────────
 # Lore's embedded stores are generated at runtime and must never be committed.
