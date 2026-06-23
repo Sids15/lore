@@ -23,13 +23,13 @@ Lore is built around **three independent indexes** that feed a unified query lay
 |-------|--------|----------|
 | **A — Code** | source files | AST-aware chunks + embeddings + dependency graph (static) + semantic graph |
 | **B — Git history** | `.git/` | LLM-summarised commits, blame map, author/file coverage |
-| **C — Docs** | markdown / text / PDF | recursive text chunks + embeddings |
+| **C — Docs** | markdown / text | recursive, heading-aware text chunks + embeddings |
 
 A query flows through:
 
 ```
 question
-  → agentic router (local LLM classifies: code / multi-hop / historical / architectural / cross-layer / trivial)
+  → agentic router (local LLM classifies: code / relational / architectural / historical / docs / trivial)
   → retrieval (vector + BM25 → Reciprocal Rank Fusion → cross-encoder reranker; graph traversal; history lookup)
   → context assembly
   → LLM generation (Ollama)
@@ -170,5 +170,7 @@ Feature-complete. Built phase-by-phase per the PRD roadmap:
 - **Agentic router** — classifies each question and adapts retrieval (GraphRAG, history), with a
   self-correction retry on weak answers.
 - **Git history index** — commit summaries (embedded), function-level blame, and authorship.
+- **Docs index** — markdown/text docs split into heading-aware chunks and embedded; a `docs`
+  router category answers documentation questions with file/line citations ("Index docs" button).
 - **Evaluation** — a local harness reporting retrieval recall, faithfulness, and answer relevancy.
 - **Packaging** — PyInstaller-frozen sidecar bundled into the Tauri installer (no Python needed).
