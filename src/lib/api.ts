@@ -63,6 +63,7 @@ export interface IndexJob {
 export interface IndexStats {
   code_chunks: number;
   commits: number;
+  doc_chunks: number;
 }
 
 async function parseOrThrow<T>(response: Response, action: string): Promise<T> {
@@ -117,6 +118,22 @@ export async function fetchHistoryStatus(signal?: AbortSignal): Promise<IndexJob
   return parseOrThrow<IndexJob>(response, "Fetch history status");
 }
 
+/** Start indexing the repository's documentation (reuses the IndexJob shape). */
+export async function startDocsIndex(path: string): Promise<IndexJob> {
+  const response = await fetch(`${sidecarBaseUrl}/index/docs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return parseOrThrow<IndexJob>(response, "Start docs indexing");
+}
+
+/** Fetch the current/last docs-indexing job status. */
+export async function fetchDocsStatus(signal?: AbortSignal): Promise<IndexJob> {
+  const response = await fetch(`${sidecarBaseUrl}/index/docs/status`, { signal });
+  return parseOrThrow<IndexJob>(response, "Fetch docs status");
+}
+
 /** A retrieved code chunk cited as a source for an answer. */
 export interface Source {
   chunk_id: string;
@@ -143,6 +160,17 @@ export interface CommitHit {
   score: number;
 }
 
+/** A documentation chunk cited as a source for an answer. */
+export interface DocHit {
+  chunk_id: string;
+  file_path: string;
+  heading: string;
+  start_line: number;
+  end_line: number;
+  text: string;
+  score: number;
+}
+
 /** A grounded answer with its sources (mirrors the sidecar AnswerResponse). */
 export interface AnswerResponse {
   answer: string;
@@ -153,6 +181,7 @@ export interface AnswerResponse {
   graph_used: boolean; // whether graph context was folded in
   corrected: boolean; // whether a self-correction retry produced this answer
   commits: CommitHit[]; // git-history commits cited in the answer
+  docs: DocHit[]; // documentation chunks cited in the answer
 }
 
 /** Ask a grounded question about the indexed repository. */

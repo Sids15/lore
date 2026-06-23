@@ -165,6 +165,22 @@ function AnswerCard({ entry }: { entry: QaEntry }) {
           </ul>
         </div>
       )}
+
+      {answer.docs.length > 0 && (
+        <div className="query__sources">
+          <h3 className="query__sources-title">Docs</h3>
+          <ul>
+            {answer.docs.map((d) => (
+              <li key={d.chunk_id}>
+                <code>{d.heading || d.file_path}</code>
+                <span className="query__source-loc">
+                  {d.file_path}:{d.start_line}-{d.end_line}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </article>
   );
 }

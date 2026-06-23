@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import {
+  fetchDocsStatus,
   fetchHistoryStatus,
   fetchIndexStats,
   fetchIndexStatus,
   startCodeIndex,
+  startDocsIndex,
   startHistoryIndex,
   type IndexJob,
 } from "../lib/api";
@@ -21,8 +23,10 @@ export function IndexPanel() {
   const [path, setPath] = useState<string | null>(null);
   const [codeJob, setCodeJob] = useState<IndexJob | null>(null);
   const [historyJob, setHistoryJob] = useState<IndexJob | null>(null);
+  const [docsJob, setDocsJob] = useState<IndexJob | null>(null);
   const [chunks, setChunks] = useState<number | null>(null);
   const [commits, setCommits] = useState<number | null>(null);
+  const [docs, setDocs] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refreshStats = useCallback(async () => {
@@ -30,6 +34,7 @@ export function IndexPanel() {
       const stats = await fetchIndexStats();
       setChunks(stats.code_chunks);
       setCommits(stats.commits);
+      setDocs(stats.doc_chunks);
     } catch {
       // Sidecar may be starting; StatusPanel surfaces connection issues.
     }
@@ -41,6 +46,7 @@ export function IndexPanel() {
     void refreshStats();
     fetchIndexStatus().then((j) => !cancelled && setCodeJob(j)).catch(() => undefined);
     fetchHistoryStatus().then((j) => !cancelled && setHistoryJob(j)).catch(() => undefined);
+    fetchDocsStatus().then((j) => !cancelled && setDocsJob(j)).catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -50,7 +56,8 @@ export function IndexPanel() {
   useEffect(() => {
     const codeRunning = codeJob?.state === "running";
     const historyRunning = historyJob?.state === "running";
-    if (!codeRunning && !historyRunning) return;
+    const docsRunning = docsJob?.state === "running";
+    if (!codeRunning && !historyRunning && !docsRunning) return;
 
     const timer = window.setInterval(async () => {
       try {
@@ -64,14 +71,22 @@ export function IndexPanel() {
           setHistoryJob(next);
           if (next.state !== "running") void refreshStats();
         }
+        if (docsRunning) {
+          const next = await fetchDocsStatus();
+          setDocsJob(next);
+          if (next.state !== "running") void refreshStats();
+        }
       } catch {
         // Ignore transient polling errors; the next tick retries.
       }
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [codeJob?.state, historyJob?.state, refreshStats]);
+  }, [codeJob?.state, historyJob?.state, docsJob?.state, refreshStats]);
 
-  const busy = codeJob?.state === "running" || historyJob?.state === "running";
+  const busy =
+    codeJob?.state === "running" ||
+    historyJob?.state === "running" ||
+    docsJob?.state === "running";
 
   const chooseFolder = useCallback(async () => {
     setError(null);
@@ -103,6 +118,16 @@ export function IndexPanel() {
     }
   }, [path]);
 
+  const startDocs = useCallback(async () => {
+    if (!path) return;
+    setError(null);
+    try {
+      setDocsJob(await startDocsIndex(path));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start docs indexing");
+    }
+  }, [path]);
+
   return (
     <section className="index">
       <h2 className="index__title">Index</h2>
@@ -121,12 +146,16 @@ export function IndexPanel() {
         <button className="index__btn" onClick={startHistory} disabled={!path || busy}>
           {historyJob?.state === "running" ? "Indexing…" : "Index history"}
         </button>
+        <button className="index__btn" onClick={startDocs} disabled={!path || busy}>
+          {docsJob?.state === "running" ? "Indexing…" : "Index docs"}
+        </button>
       </div>
 
       {path && <p className="index__path" title={path}>{path}</p>}
 
       <JobProgress label="Code" job={codeJob} />
       <JobProgress label="History" job={historyJob} />
+      <JobProgress label="Docs" job={docsJob} />
 
       {error && <p className="index__error">{error}</p>}
 
@@ -134,6 +163,8 @@ export function IndexPanel() {
         {chunks === null ? "—" : `${chunks.toLocaleString()} chunks`}
         {" · "}
         {commits === null ? "—" : `${commits.toLocaleString()} commits`}
+        {" · "}
+        {docs === null ? "—" : `${docs.toLocaleString()} doc chunks`}
       </p>
     </section>
   );
