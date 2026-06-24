@@ -65,6 +65,16 @@ def delete_repo(db: DBConnection, repo: str) -> None:
         db.open_table(_table_name()).delete(f"repo = '{_quote(repo)}'")
 
 
+def delete_files(db: DBConnection, repo: str, paths: list[str]) -> None:
+    """Remove all chunks for specific files in a repo (incremental re-index)."""
+    if not paths or not _exists(db):
+        return
+    quoted = ", ".join(f"'{_quote(path)}'" for path in paths)
+    db.open_table(_table_name()).delete(
+        f"repo = '{_quote(repo)}' AND file_path IN ({quoted})"
+    )
+
+
 def count(db: DBConnection) -> int:
     """Total number of indexed documentation chunks."""
     if not _exists(db):

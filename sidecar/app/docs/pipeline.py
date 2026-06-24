@@ -15,9 +15,10 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.db import lancedb_client, sqlite_store
-from app.docs.splitter import chunk_docs_repo
+from app.docs.splitter import iter_doc_files, split_text
 from app.index import docs_index
 from app.index.docs_index import DocChunkRecord
+from app.ingest import file_state
 from app.llm import ollama_client
 
 # Number of chunks embedded + written per batch.
@@ -58,8 +59,13 @@ def _batches(items: list, size: int):
         yield items[i : i + size]
 
 
-async def index_docs(repo_path: Path) -> DocsJob:
-    """Index a repository's documentation into LanceDB, updating job status."""
+async def index_docs(repo_path: Path, *, force: bool = False) -> DocsJob:
+    """Index a repository's documentation into LanceDB, updating job status.
+
+    Incremental by default: only files whose content hash changed (or are new)
+    are re-chunked and re-embedded; deleted files are pruned. ``force=True`` does
+    a full wipe-and-rebuild.
+    """
     global _job
     settings = get_settings()
     repo = repo_path.name
@@ -69,37 +75,68 @@ async def index_docs(repo_path: Path) -> DocsJob:
         # Ensure the embedded stores exist even when run outside the app lifespan.
         sqlite_store.init_schema(settings.data_path)
 
-        chunks = chunk_docs_repo(repo_path)
-        _job.total = len(chunks)
-        _job.message = "Indexing…"
+        files = iter_doc_files(repo_path)
+        path_by_rel = {p.relative_to(repo_path).as_posix(): p for p in files}
+        current = {rel: file_state.hash_file(p) for rel, p in path_by_rel.items()}
 
         db = lancedb_client.connect(settings.data_path)
-        docs_index.delete_repo(db, repo)
+        conn = sqlite_store.connect(settings.data_path)
+        try:
+            if force:
+                docs_index.delete_repo(db, repo)
+                file_state.clear_repo(conn, repo)
 
-        for batch in _batches(chunks, _BATCH_SIZE):
-            try:
-                texts = [c.text for c in batch]
-                vectors = await ollama_client.embed_many(
-                    settings.ollama_url,
-                    settings.embedding_model,
-                    texts,
-                    concurrency=settings.embed_concurrency,
-                )
-                records = [
-                    DocChunkRecord(vector=vector, **chunk.model_dump())
-                    for chunk, vector in zip(batch, vectors)
-                ]
-                docs_index.upsert(db, records)
-            except (httpx.HTTPError, ValueError) as error:
-                _job.errors.append(f"batch failed: {error}")
-            finally:
-                _job.processed += len(batch)
+            diff = file_state.diff_files(conn, repo, current)
+            # After a force-clear every file looks new; otherwise use the diff.
+            to_index = diff.to_index
+            to_delete = [] if force else diff.to_delete
 
-        # Rebuild the full-text index so keyword/hybrid search covers new rows.
-        docs_index.ensure_fts_index(db, force=True)
+            # Chunk only the files that need (re-)indexing.
+            chunks = []
+            for rel in to_index:
+                text = path_by_rel[rel].read_text(encoding="utf-8", errors="replace")
+                chunks.extend(split_text(text, repo=repo, file_path=rel, settings=settings))
+
+            _job.total = len(chunks)
+            _job.message = "Indexing…"
+
+            # Clear stale rows for changed + deleted files before re-adding.
+            docs_index.delete_files(db, repo, to_delete)
+
+            for batch in _batches(chunks, _BATCH_SIZE):
+                try:
+                    texts = [c.text for c in batch]
+                    vectors = await ollama_client.embed_many(
+                        settings.ollama_url,
+                        settings.embedding_model,
+                        texts,
+                        concurrency=settings.embed_concurrency,
+                    )
+                    records = [
+                        DocChunkRecord(vector=vector, **chunk.model_dump())
+                        for chunk, vector in zip(batch, vectors)
+                    ]
+                    docs_index.upsert(db, records)
+                except (httpx.HTTPError, ValueError) as error:
+                    _job.errors.append(f"batch failed: {error}")
+                finally:
+                    _job.processed += len(batch)
+
+            # Rebuild the full-text index when rows changed.
+            if chunks or to_delete:
+                docs_index.ensure_fts_index(db, force=True)
+
+            # Record the new hashes and drop deleted files from the index.
+            file_state.record_files(conn, repo, current)
+            file_state.prune(conn, repo, diff.deleted)
+        finally:
+            conn.close()
 
         _job.state = "done"
-        _job.message = f"Indexed {_job.processed} doc chunks"
+        _job.message = (
+            f"{len(to_index)} changed, {len(diff.unchanged)} unchanged, "
+            f"{len(diff.deleted)} removed"
+        )
         if _job.errors:
             _job.message += f" ({len(_job.errors)} batch error(s))"
     except Exception as error:  # noqa: BLE001 - report any failure to the UI
