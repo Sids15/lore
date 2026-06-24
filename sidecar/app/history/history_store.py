@@ -68,6 +68,19 @@ def set_summary(conn: sqlite3.Connection, sha: str, summary: str) -> None:
         conn.execute("UPDATE commits SET summary = ? WHERE sha = ?", (summary, sha))
 
 
+def existing_summaries(conn: sqlite3.Connection, repo: str) -> dict[str, str]:
+    """Return already-summarised commits as ``{sha: summary}`` for this repo.
+
+    Used by incremental indexing to skip commits already summarised (commits are
+    immutable, so a stored summary never goes stale).
+    """
+    rows = conn.execute(
+        "SELECT sha, summary FROM commits WHERE repo = ? AND summary IS NOT NULL",
+        (repo,),
+    ).fetchall()
+    return {row[0]: row[1] for row in rows}
+
+
 def commit_count(conn: sqlite3.Connection, repo: str) -> int:
     row = conn.execute("SELECT COUNT(*) FROM commits WHERE repo = ?", (repo,)).fetchone()
     return int(row[0]) if row else 0

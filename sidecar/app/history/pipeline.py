@@ -55,8 +55,14 @@ def _batches(items: list, size: int):
         yield items[i : i + size]
 
 
-async def index_history(repo_path: Path) -> HistoryJob:
-    """Index a repository's git history (summaries + blame + authorship)."""
+async def index_history(repo_path: Path, *, force: bool = False) -> HistoryJob:
+    """Index a repository's git history (summaries + blame + authorship).
+
+    Incremental by default: commits are immutable, so only commits not already
+    summarised get a (LLM) summary + embedding; existing summaries are preserved.
+    Blame/authorship/commit rows are rebuilt every run (cheap, no LLM). ``force``
+    re-summarises everything.
+    """
     global _job
     settings = get_settings()
     repo = repo_path.name
@@ -70,18 +76,26 @@ async def index_history(repo_path: Path) -> HistoryJob:
             _job.message = "Not a git repository"
             return _job
 
-        _job.total = len(commits)
         blame_entries = blame.blame_functions(repo_path, chunk_repo(repo_path))
 
         conn = sqlite_store.connect(settings.data_path)
         db = lancedb_client.connect(settings.data_path)
         try:
-            # Structured data first (idempotent per-repo rebuild).
-            history_store.replace_repo_history(conn, repo, commits, blame_entries)
-            history_index.delete_repo(db, repo)
+            # Which commits already have a summary? (Read before the rebuild nulls them.)
+            preserved = {} if force else history_store.existing_summaries(conn, repo)
+            if force:
+                history_index.delete_repo(db, repo)
 
+            # Structured data: rebuilt every run (idempotent, no LLM).
+            history_store.replace_repo_history(conn, repo, commits, blame_entries)
+            # Re-apply preserved summaries (their LanceDB rows are untouched).
+            for sha, summary in preserved.items():
+                history_store.set_summary(conn, sha, summary)
+
+            to_summarise = [c for c in commits if c.sha not in preserved]
+            _job.total = len(to_summarise)
             _job.message = "Summarising commits…"
-            for batch in _batches(commits, _BATCH_SIZE):
+            for batch in _batches(to_summarise, _BATCH_SIZE):
                 try:
                     summaries = await summarize.summarise_many(batch, settings)
                     vectors = await ollama_client.embed_many(
@@ -111,12 +125,13 @@ async def index_history(repo_path: Path) -> HistoryJob:
                 finally:
                     _job.processed += len(batch)
 
-            history_index.ensure_fts_index(db, force=True)
+            if to_summarise:
+                history_index.ensure_fts_index(db, force=True)
         finally:
             conn.close()
 
         _job.state = "done"
-        _job.message = f"Indexed {_job.processed} commits"
+        _job.message = f"{len(to_summarise)} new, {len(preserved)} unchanged"
         if _job.errors:
             _job.message += f" ({len(_job.errors)} batch error(s))"
     except Exception as error:  # noqa: BLE001 - report any failure to the UI
