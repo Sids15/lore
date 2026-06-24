@@ -26,6 +26,7 @@ EXPECTED_TABLES = {
     "graph_edges",
     "repos",
     "file_index",
+    "chunk_relations",
 }
 
 # Schema definition. Each statement is idempotent.
@@ -117,6 +118,19 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         PRIMARY KEY (repo, file_path)
     )
     """,
+    # --- Incremental indexing: per-chunk semantic relations (graph rebuild) ---
+    # Persisted so the semantic graph can be rebuilt from unchanged files without
+    # re-running the (LLM) enrichment that produced them.
+    """
+    CREATE TABLE IF NOT EXISTS chunk_relations (
+        repo       TEXT NOT NULL,
+        chunk_id   TEXT NOT NULL,
+        file_path  TEXT NOT NULL,              -- POSIX, for per-file pruning
+        relations  TEXT NOT NULL,              -- EntityRelations as JSON
+        PRIMARY KEY (repo, chunk_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_chunk_relations_file ON chunk_relations (repo, file_path)",
 )
 
 
