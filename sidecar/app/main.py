@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import parent_watchdog
 from app.api import eval as eval_api
-from app.api import graph, health, index, models, query, source
+from app.api import graph, health, index, models, query, refactor, source
 from app.config import get_settings
 from app.db import lancedb_client, sqlite_store
 
@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(eval_api.router)
     app.include_router(source.router)
     app.include_router(models.router)
+    app.include_router(refactor.router)
     return app
 
 
