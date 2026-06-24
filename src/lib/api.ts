@@ -421,6 +421,69 @@ export interface SourceView {
   lines: string[];
 }
 
+// --- Model pull (NDJSON over /models/pull) ------------------------------------
+
+/** A download-progress update while pulling a model. */
+export interface PullProgress {
+  status: string;
+  completed: number | null;
+  total: number | null;
+}
+
+/** Callbacks invoked as a model pull streams. All are optional. */
+export interface PullHandlers {
+  onProgress?: (event: PullProgress) => void;
+  onDone?: () => void;
+  onError?: (detail: string) => void;
+}
+
+type PullEvent =
+  | ({ type: "progress" } & PullProgress)
+  | { type: "done" }
+  | { type: "error"; detail: string };
+
+/** Pull an Ollama model, dispatching progress events as they stream in. */
+export async function pullModelStream(
+  model: string,
+  handlers: PullHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`${sidecarBaseUrl}/models/pull`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model }),
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Pull failed: HTTP ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const flushLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const event = JSON.parse(trimmed) as PullEvent;
+    if (event.type === "progress") handlers.onProgress?.(event);
+    else if (event.type === "done") handlers.onDone?.();
+    else if (event.type === "error") handlers.onError?.(event.detail);
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline: number;
+    while ((newline = buffer.indexOf("\n")) >= 0) {
+      flushLine(buffer.slice(0, newline));
+      buffer = buffer.slice(newline + 1);
+    }
+  }
+  flushLine(buffer);
+}
+
 /** Fetch the lines around a cited range, for the in-app source viewer. */
 export async function fetchSource(
   repo: string,

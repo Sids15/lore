@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { EvalPanel } from "./components/EvalPanel";
 import { GraphPanel } from "./components/GraphPanel";
 import { IndexPanel } from "./components/IndexPanel";
+import { ModelManager } from "./components/ModelManager";
 import { QueryPanel } from "./components/QueryPanel";
 import { StatusPanel } from "./components/StatusPanel";
 import "./App.css";
@@ -44,6 +45,8 @@ function App() {
         </nav>
         <span className="topbar__sub">codebase lorekeeper</span>
       </header>
+
+      <ModelManager />
 
       <main className="app__content">
         <Tab id="ask" view={view}><QueryPanel /></Tab>
