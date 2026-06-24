@@ -70,7 +70,17 @@ fn build_command(app: &AppHandle) -> Command {
     let host = std::env::var("LORE_HOST").unwrap_or_else(|_| DEFAULT_HOST.to_string());
     let port = std::env::var("LORE_PORT").unwrap_or_else(|_| DEFAULT_PORT.to_string());
 
-    let mut cmd = match bundled_sidecar(app) {
+    // In debug builds always run the project virtualenv, even though Tauri stages
+    // the bundled sidecar resource into target/debug — otherwise a stale frozen
+    // binary would shadow live backend changes during `tauri dev`. Only packaged
+    // (release) builds use the bundled binary.
+    let bundled = if cfg!(debug_assertions) {
+        None
+    } else {
+        bundled_sidecar(app)
+    };
+
+    let mut cmd = match bundled {
         Some(binary) => {
             // Packaged: run the frozen binary; it reads LORE_HOST/PORT from env.
             let mut cmd = Command::new(&binary);
