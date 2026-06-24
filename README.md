@@ -1,5 +1,7 @@
 # Lore
 
+[![CI](https://github.com/Sids15/lore/actions/workflows/ci.yml/badge.svg)](https://github.com/Sids15/lore/actions/workflows/ci.yml)
+
 **Lore** is a local-first, offline-capable **agentic RAG desktop assistant** that answers
 natural-language questions about a code repository — its source code, its git history, and its
 documentation — without sending anything to the cloud.
