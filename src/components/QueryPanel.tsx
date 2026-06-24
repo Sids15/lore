@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { askQuestionStream, type AnswerResponse } from "../lib/api";
+import { askQuestionStream, type AnswerResponse, type ConversationTurn } from "../lib/api";
+
+/** Most-recent completed turns sent as context for a follow-up question. */
+const CONVERSATION_TURNS = 6;
 
 interface QaEntry {
   id: string;
@@ -64,6 +67,13 @@ export function QueryPanel() {
     const controller = new AbortController();
     controllerRef.current = controller;
 
+    // The conversation context: prior completed turns, oldest-first, capped.
+    const priorTurns: ConversationTurn[] = history
+      .filter((e) => e.answer.answer.trim() !== "")
+      .map((e) => ({ question: e.question, answer: e.answer.answer }))
+      .reverse()
+      .slice(-CONVERSATION_TURNS);
+
     const id = crypto.randomUUID();
     setHistory((prev) => [{ id, question: q, answer: { ...EMPTY_ANSWER }, status: "generating" }, ...prev]);
     setQuestion("");
@@ -106,6 +116,7 @@ export function QueryPanel() {
           onError: (detail) => setError(detail),
         },
         controller.signal,
+        priorTurns,
       );
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -118,10 +129,16 @@ export function QueryPanel() {
         setStreamingId(null);
       }
     }
-  }, [question, streamingId, patch]);
+  }, [question, streamingId, history, patch]);
 
   const stop = useCallback(() => {
     controllerRef.current?.abort();
+  }, []);
+
+  const newChat = useCallback(() => {
+    controllerRef.current?.abort();
+    setHistory([]);
+    setError(null);
   }, []);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -134,7 +151,14 @@ export function QueryPanel() {
 
   return (
     <section className="query">
-      <h2 className="query__title">Ask</h2>
+      <div className="query__header">
+        <h2 className="query__title">Ask</h2>
+        {history.length > 0 && (
+          <button className="query__newchat" onClick={newChat}>
+            New chat
+          </button>
+        )}
+      </div>
 
       <textarea
         className="query__input"

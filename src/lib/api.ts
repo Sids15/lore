@@ -184,15 +184,22 @@ export interface AnswerResponse {
   docs: DocHit[]; // documentation chunks cited in the answer
 }
 
+/** One prior exchange, sent as context for follow-up questions. */
+export interface ConversationTurn {
+  question: string;
+  answer: string;
+}
+
 /** Ask a grounded question about the indexed repository. */
 export async function askQuestion(
   question: string,
+  history: ConversationTurn[] = [],
   signal?: AbortSignal,
 ): Promise<AnswerResponse> {
   const response = await fetch(`${sidecarBaseUrl}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history }),
     signal,
   });
   return parseOrThrow<AnswerResponse>(response, "Ask question");
@@ -268,11 +275,12 @@ export async function askQuestionStream(
   question: string,
   handlers: StreamHandlers,
   signal?: AbortSignal,
+  history: ConversationTurn[] = [],
 ): Promise<void> {
   const response = await fetch(`${sidecarBaseUrl}/query/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history }),
     signal,
   });
   if (!response.ok || !response.body) {

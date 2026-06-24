@@ -499,6 +499,33 @@ body,
   color: var(--text);
 }
 
+/* Ask panel header: title + New chat. */
+.query__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.query__newchat {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.query__newchat:hover {
+  border-color: var(--brass);
+  color: var(--text);
+}
+
 /* Ask / Stop controls + streaming affordances. */
 .query__controls {
   display: flex;
