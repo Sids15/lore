@@ -27,6 +27,7 @@ export function IndexPanel() {
   const [chunks, setChunks] = useState<number | null>(null);
   const [commits, setCommits] = useState<number | null>(null);
   const [docs, setDocs] = useState<number | null>(null);
+  const [force, setForce] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshStats = useCallback(async () => {
@@ -102,31 +103,31 @@ export function IndexPanel() {
     if (!path) return;
     setError(null);
     try {
-      setCodeJob(await startCodeIndex(path));
+      setCodeJob(await startCodeIndex(path, force));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start indexing");
     }
-  }, [path]);
+  }, [path, force]);
 
   const startHistory = useCallback(async () => {
     if (!path) return;
     setError(null);
     try {
-      setHistoryJob(await startHistoryIndex(path));
+      setHistoryJob(await startHistoryIndex(path, force));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start history indexing");
     }
-  }, [path]);
+  }, [path, force]);
 
   const startDocs = useCallback(async () => {
     if (!path) return;
     setError(null);
     try {
-      setDocsJob(await startDocsIndex(path));
+      setDocsJob(await startDocsIndex(path, force));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start docs indexing");
     }
-  }, [path]);
+  }, [path, force]);
 
   return (
     <section className="index">
@@ -152,6 +153,16 @@ export function IndexPanel() {
       </div>
 
       {path && <p className="index__path" title={path}>{path}</p>}
+
+      <label className="index__force">
+        <input
+          type="checkbox"
+          checked={force}
+          onChange={(e) => setForce(e.currentTarget.checked)}
+          disabled={busy}
+        />
+        Force full re-index (ignore cached file hashes)
+      </label>
 
       <JobProgress label="Code" job={codeJob} />
       <JobProgress label="History" job={historyJob} />

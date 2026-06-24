@@ -323,6 +323,22 @@ body,
   border-radius: 6px;
 }
 
+.index__force {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.index__force input {
+  accent-color: var(--brass);
+  cursor: pointer;
+}
+
 .index__progress {
   display: flex;
   flex-direction: column;

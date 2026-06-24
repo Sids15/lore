@@ -23,9 +23,10 @@ router = APIRouter(prefix="/index", tags=["index"])
 
 
 class IndexRequest(BaseModel):
-    """Request body for starting a code-index run."""
+    """Request body for starting an index run."""
 
     path: str
+    force: bool = False  # full re-index instead of incremental (change-aware)
 
 
 class IndexStats(BaseModel):
@@ -48,7 +49,7 @@ async def start_code_index(request: IndexRequest) -> IndexJob:
     # Mark running synchronously so the response and any immediate poll/retry see
     # the active job, then launch in the background (progress via GET /index/status).
     pipeline.mark_running(repo_path.name)
-    asyncio.create_task(pipeline.index_repo(repo_path))
+    asyncio.create_task(pipeline.index_repo(repo_path, force=request.force))
     return pipeline.current_job()
 
 
@@ -80,7 +81,7 @@ async def start_history_index(request: IndexRequest) -> HistoryJob:
         raise HTTPException(status_code=409, detail="A history indexing job is already running")
 
     history_pipeline.mark_running(repo_path.name)
-    asyncio.create_task(history_pipeline.index_history(repo_path))
+    asyncio.create_task(history_pipeline.index_history(repo_path, force=request.force))
     return history_pipeline.current_job()
 
 
@@ -100,7 +101,7 @@ async def start_docs_index(request: IndexRequest) -> DocsJob:
         raise HTTPException(status_code=409, detail="A docs indexing job is already running")
 
     docs_pipeline.mark_running(repo_path.name)
-    asyncio.create_task(docs_pipeline.index_docs(repo_path))
+    asyncio.create_task(docs_pipeline.index_docs(repo_path, force=request.force))
     return docs_pipeline.current_job()
 
 

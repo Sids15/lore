@@ -81,11 +81,11 @@ async function parseOrThrow<T>(response: Response, action: string): Promise<T> {
 }
 
 /** Start indexing the repository at the given path. */
-export async function startCodeIndex(path: string): Promise<IndexJob> {
+export async function startCodeIndex(path: string, force = false): Promise<IndexJob> {
   const response = await fetch(`${sidecarBaseUrl}/index/code`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, force }),
   });
   return parseOrThrow<IndexJob>(response, "Start indexing");
 }
@@ -103,11 +103,11 @@ export async function fetchIndexStats(signal?: AbortSignal): Promise<IndexStats>
 }
 
 /** Start indexing the repository's git history (reuses the IndexJob shape). */
-export async function startHistoryIndex(path: string): Promise<IndexJob> {
+export async function startHistoryIndex(path: string, force = false): Promise<IndexJob> {
   const response = await fetch(`${sidecarBaseUrl}/index/history`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, force }),
   });
   return parseOrThrow<IndexJob>(response, "Start history indexing");
 }
@@ -119,11 +119,11 @@ export async function fetchHistoryStatus(signal?: AbortSignal): Promise<IndexJob
 }
 
 /** Start indexing the repository's documentation (reuses the IndexJob shape). */
-export async function startDocsIndex(path: string): Promise<IndexJob> {
+export async function startDocsIndex(path: string, force = false): Promise<IndexJob> {
   const response = await fetch(`${sidecarBaseUrl}/index/docs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, force }),
   });
   return parseOrThrow<IndexJob>(response, "Start docs indexing");
 }
