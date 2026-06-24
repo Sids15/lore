@@ -114,6 +114,9 @@ class Settings(BaseSettings):
     # --- Evaluation (Phase 7) ---
     eval_k: int = 8  # retrieval recall@k cutoff for the eval harness
 
+    # --- Source viewer (click-through citations) ---
+    source_view_context: int = 20  # lines of context shown around a cited range
+
     # Directory names skipped when walking a repository for source files.
     index_exclude_dirs: list[str] = [
         ".git",

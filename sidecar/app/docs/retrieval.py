@@ -18,6 +18,7 @@ class DocHit(BaseModel):
     """A documentation chunk returned from docs search."""
 
     chunk_id: str
+    repo: str
     file_path: str
     heading: str
     start_line: int
@@ -29,6 +30,7 @@ class DocHit(BaseModel):
     def from_row(cls, row: dict) -> "DocHit":
         return cls(
             chunk_id=row["chunk_id"],
+            repo=row.get("repo") or "",
             file_path=row["file_path"],
             heading=row.get("heading") or "",
             start_line=int(row["start_line"]),

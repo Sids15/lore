@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.db import lancedb_client, sqlite_store
 from app.docs.splitter import iter_doc_files, split_text
+from app.graph import graph_store
 from app.index import docs_index
 from app.index.docs_index import DocChunkRecord
 from app.ingest import file_state
@@ -129,6 +130,8 @@ async def index_docs(repo_path: Path, *, force: bool = False) -> DocsJob:
             # Record the new hashes and drop deleted files from the index.
             file_state.record_files(conn, repo, current)
             file_state.prune(conn, repo, diff.deleted)
+            # Record the repo's path so the source viewer can resolve doc citations.
+            graph_store.upsert_repo(conn, repo, str(repo_path.resolve()))
         finally:
             conn.close()
 

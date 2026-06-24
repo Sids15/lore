@@ -109,6 +109,7 @@ def test_format_context_includes_graph_section():
 def _doc_hit(heading: str = "Setup") -> "context.DocHit":
     return context.DocHit(
         chunk_id="d1",
+        repo="r",
         file_path="README.md",
         heading=heading,
         start_line=1,
