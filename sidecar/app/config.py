@@ -117,6 +117,12 @@ class Settings(BaseSettings):
     # --- Source viewer (click-through citations) ---
     source_view_context: int = 20  # lines of context shown around a cited range
 
+    # --- Refactoring agent ---
+    # A node is a "coupling hub" candidate when both its in- and out-degree exceed
+    # this (central + tightly coupled, not a leaf).
+    refactor_hub_degree: int = 6
+    refactor_max_candidates: int = 50  # cap on candidates returned
+
     # Directory names skipped when walking a repository for source files.
     index_exclude_dirs: list[str] = [
         ".git",
