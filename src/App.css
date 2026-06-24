@@ -675,6 +675,133 @@ body,
   color: var(--faint);
 }
 
+/* Citation rows are buttons that open the source viewer. */
+.query__source-open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.15rem 0.3rem;
+  margin: -0.15rem -0.3rem;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.query__source-open:hover {
+  border-color: var(--border);
+  background: var(--raised);
+}
+
+/* ============================================================================
+   Source viewer (click-through citations)
+   ========================================================================== */
+
+.viewer__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: rgba(8, 7, 5, 0.66);
+}
+
+.viewer {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 100%);
+  max-height: 80vh;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.viewer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.viewer__path {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--brass);
+  word-break: break-all;
+}
+
+.viewer__close {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.viewer__close:hover {
+  border-color: var(--rust);
+  color: var(--rust);
+}
+
+.viewer__error,
+.viewer__loading {
+  margin: 0;
+  padding: 1rem;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.viewer__error {
+  color: var(--rust);
+}
+
+.viewer__code {
+  margin: 0;
+  padding: 0.5rem 0;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.viewer__line {
+  display: flex;
+  gap: 0.85rem;
+  padding: 0 0.85rem;
+  white-space: pre;
+}
+
+.viewer__line--cited {
+  background: var(--brass-dim, rgba(217, 162, 74, 0.13));
+  border-left: 2px solid var(--brass);
+  padding-left: calc(0.85rem - 2px);
+}
+
+.viewer__gutter {
+  flex-shrink: 0;
+  width: 3ch;
+  text-align: right;
+  color: var(--faint);
+  user-select: none;
+}
+
+.viewer__text {
+  color: var(--text);
+}
+
 /* ============================================================================
    Graph panel
    ========================================================================== */

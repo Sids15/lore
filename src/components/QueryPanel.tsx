@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { askQuestionStream, type AnswerResponse, type ConversationTurn } from "../lib/api";
+import { SourceViewer, type SourceTarget } from "./SourceViewer";
 
 /** Most-recent completed turns sent as context for a follow-up question. */
 const CONVERSATION_TURNS = 6;
@@ -44,6 +45,7 @@ export function QueryPanel() {
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0); // drives the live latency readout
+  const [viewing, setViewing] = useState<SourceTarget | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const startedRef = useRef<number>(0);
 
@@ -201,10 +203,13 @@ export function QueryPanel() {
               entry={entry}
               streaming={streaming}
               latencyLabel={latencyLabel}
+              onOpenSource={setViewing}
             />
           );
         })}
       </div>
+
+      {viewing && <SourceViewer target={viewing} onClose={() => setViewing(null)} />}
     </section>
   );
 }
@@ -213,10 +218,12 @@ function AnswerCard({
   entry,
   streaming,
   latencyLabel,
+  onOpenSource,
 }: {
   entry: QaEntry;
   streaming: boolean;
   latencyLabel: string | null;
+  onOpenSource: (target: SourceTarget) => void;
 }) {
   const { question, answer } = entry;
   const [copied, setCopied] = useState(false);
@@ -277,11 +284,24 @@ function AnswerCard({
           <ul>
             {answer.sources.map((s) => (
               <li key={s.chunk_id}>
-                <code>{s.symbol}</code>
-                <span className="query__source-loc">
-                  {s.file_path}:{s.start_line}-{s.end_line}
-                </span>
-                <span className="query__source-kind">{s.kind}</span>
+                <button
+                  className="query__source-open"
+                  onClick={() =>
+                    onOpenSource({
+                      repo: s.repo,
+                      path: s.file_path,
+                      start: s.start_line,
+                      end: s.end_line,
+                    })
+                  }
+                  title="Open in source viewer"
+                >
+                  <code>{s.symbol}</code>
+                  <span className="query__source-loc">
+                    {s.file_path}:{s.start_line}-{s.end_line}
+                  </span>
+                  <span className="query__source-kind">{s.kind}</span>
+                </button>
               </li>
             ))}
           </ul>
@@ -311,10 +331,23 @@ function AnswerCard({
           <ul>
             {answer.docs.map((d) => (
               <li key={d.chunk_id}>
-                <code>{d.heading || d.file_path}</code>
-                <span className="query__source-loc">
-                  {d.file_path}:{d.start_line}-{d.end_line}
-                </span>
+                <button
+                  className="query__source-open"
+                  onClick={() =>
+                    onOpenSource({
+                      repo: d.repo,
+                      path: d.file_path,
+                      start: d.start_line,
+                      end: d.end_line,
+                    })
+                  }
+                  title="Open in source viewer"
+                >
+                  <code>{d.heading || d.file_path}</code>
+                  <span className="query__source-loc">
+                    {d.file_path}:{d.start_line}-{d.end_line}
+                  </span>
+                </button>
               </li>
             ))}
           </ul>

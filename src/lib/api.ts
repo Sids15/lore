@@ -163,6 +163,7 @@ export interface CommitHit {
 /** A documentation chunk cited as a source for an answer. */
 export interface DocHit {
   chunk_id: string;
+  repo: string;
   file_path: string;
   heading: string;
   start_line: number;
@@ -408,4 +409,32 @@ export interface ViolationsResponse {
 export async function fetchViolations(signal?: AbortSignal): Promise<ViolationsResponse> {
   const response = await fetch(`${sidecarBaseUrl}/graph/violations`, { signal });
   return parseOrThrow<ViolationsResponse>(response, "Fetch violations");
+}
+
+/** A window of a cited file's lines (mirrors the sidecar SourceView). */
+export interface SourceView {
+  repo: string;
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  window_start: number;
+  lines: string[];
+}
+
+/** Fetch the lines around a cited range, for the in-app source viewer. */
+export async function fetchSource(
+  repo: string,
+  path: string,
+  start: number,
+  end: number,
+  signal?: AbortSignal,
+): Promise<SourceView> {
+  const params = new URLSearchParams({
+    repo,
+    path,
+    start: String(start),
+    end: String(end),
+  });
+  const response = await fetch(`${sidecarBaseUrl}/source?${params}`, { signal });
+  return parseOrThrow<SourceView>(response, "Fetch source");
 }
