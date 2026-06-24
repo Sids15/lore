@@ -212,6 +212,30 @@ async def generate_stream(
         yield tail
 
 
+async def pull_model(base_url: str, model: str) -> AsyncIterator[dict]:
+    """Stream an Ollama model pull, yielding each progress record.
+
+    Proxies Ollama's ``/api/pull`` (``stream=True``). Each yielded dict is a raw
+    Ollama line, e.g. ``{"status": "pulling manifest"}`` or
+    ``{"status": "downloading …", "total": N, "completed": M}``; the final record
+    has ``{"status": "success"}``. No timeout — model downloads run for minutes.
+    Raises ``httpx.HTTPError`` on transport/HTTP failure.
+    """
+    url = f"{base_url.rstrip('/')}/api/pull"
+    payload = {"name": model, "stream": True}
+    async with httpx.AsyncClient(timeout=None) as client:
+        async with client.stream("POST", url, json=payload) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                except ValueError:
+                    continue  # skip a malformed line rather than abort the pull
+                yield data
+
+
 async def embed_batch(
     base_url: str,
     model: str,
