@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.db import sqlite_store
+from app.graph import graph_store
 from app.refactor.candidates import RefactorCandidate, detect_candidates
 from app.refactor.suggest import suggest_refactor
 
@@ -32,10 +33,16 @@ def refactor(repo: str | None = None) -> RefactorResponse:
     settings = get_settings()
     conn = sqlite_store.connect(settings.data_path)
     try:
-        candidates = detect_candidates(conn, repo, settings)
+        # Resolve the repo (default: the only/first indexed one) and return it so
+        # the UI can open a candidate's files in the source viewer.
+        name = repo
+        if name is None:
+            names = graph_store.list_repos(conn)
+            name = names[0] if names else None
+        candidates = detect_candidates(conn, name, settings)
     finally:
         conn.close()
-    return RefactorResponse(repo=repo, candidates=candidates)
+    return RefactorResponse(repo=name, candidates=candidates)
 
 
 @router.post("/refactor/suggest", response_model=SuggestResponse)

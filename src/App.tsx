@@ -5,16 +5,18 @@ import { GraphPanel } from "./components/GraphPanel";
 import { IndexPanel } from "./components/IndexPanel";
 import { ModelManager } from "./components/ModelManager";
 import { QueryPanel } from "./components/QueryPanel";
+import { RefactorPanel } from "./components/RefactorPanel";
 import { StatusPanel } from "./components/StatusPanel";
 import "./App.css";
 
-type View = "ask" | "index" | "graph" | "eval";
+type View = "ask" | "index" | "graph" | "eval" | "refactor";
 
 const NAV: { id: View; label: string }[] = [
   { id: "ask", label: "ask" },
   { id: "index", label: "index" },
   { id: "graph", label: "graph" },
   { id: "eval", label: "eval" },
+  { id: "refactor", label: "refactor" },
 ];
 
 /**
@@ -53,6 +55,7 @@ function App() {
         <Tab id="index" view={view}><IndexPanel /></Tab>
         <Tab id="graph" view={view}><GraphPanel /></Tab>
         <Tab id="eval" view={view}><EvalPanel /></Tab>
+        <Tab id="refactor" view={view}><RefactorPanel /></Tab>
       </main>
 
       <footer className="statusbar">

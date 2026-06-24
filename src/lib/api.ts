@@ -484,6 +484,46 @@ export async function pullModelStream(
   flushLine(buffer);
 }
 
+// --- Refactoring agent --------------------------------------------------------
+
+/** A structural problem worth refactoring (mirrors the sidecar RefactorCandidate). */
+export interface RefactorCandidate {
+  id: string;
+  kind: "cycle" | "hub" | "violation";
+  severity: "high" | "medium" | "low";
+  title: string;
+  summary: string;
+  files: string[];
+  symbols: string[];
+}
+
+/** The detected refactor candidates for a repo. */
+export interface RefactorResponse {
+  repo: string | null;
+  candidates: RefactorCandidate[];
+}
+
+/** Fetch the refactoring candidates for the indexed repo. */
+export async function fetchRefactor(signal?: AbortSignal): Promise<RefactorResponse> {
+  const response = await fetch(`${sidecarBaseUrl}/refactor`, { signal });
+  return parseOrThrow<RefactorResponse>(response, "Fetch refactor candidates");
+}
+
+/** Request a grounded LLM refactor proposal for one candidate. */
+export async function suggestRefactor(
+  candidate: RefactorCandidate,
+  signal?: AbortSignal,
+): Promise<string> {
+  const response = await fetch(`${sidecarBaseUrl}/refactor/suggest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(candidate),
+    signal,
+  });
+  const body = await parseOrThrow<{ proposal: string }>(response, "Suggest refactor");
+  return body.proposal;
+}
+
 /** Fetch the lines around a cited range, for the in-app source viewer. */
 export async function fetchSource(
   repo: string,

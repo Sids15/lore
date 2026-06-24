@@ -896,6 +896,195 @@ body,
 }
 
 /* ============================================================================
+   Refactor panel
+   ========================================================================== */
+
+.refactor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.refactor__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.refactor__title {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.refactor__refresh {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--brass);
+  border-radius: 6px;
+  background: var(--brass);
+  color: #1a160e;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.refactor__refresh:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.refactor__empty,
+.refactor__status {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.refactor__error {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--rust);
+}
+
+.refactor__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.refactor__card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.refactor__card-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.refactor__badge {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.refactor__badge--high {
+  color: var(--rust);
+  border-color: var(--rust);
+  background: var(--rust-dim);
+}
+
+.refactor__badge--medium {
+  color: var(--brass);
+  border-color: var(--brass);
+  background: var(--brass-dim);
+}
+
+.refactor__badge--low {
+  color: var(--muted);
+}
+
+.refactor__kind {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.refactor__card-title {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.refactor__summary {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.refactor__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.refactor__file {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--brass);
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--raised);
+  cursor: pointer;
+}
+
+.refactor__file:hover:not(:disabled) {
+  border-color: var(--brass);
+}
+
+.refactor__file:disabled {
+  cursor: default;
+  color: var(--muted);
+}
+
+.refactor__suggest {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.refactor__suggest:hover {
+  border-color: var(--brass);
+}
+
+.refactor__proposal {
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text);
+  border-top: 1px solid var(--border-soft);
+  padding-top: 0.55rem;
+}
+
+.refactor__proposal p {
+  margin: 0 0 0.5rem;
+}
+
+.refactor__proposal :last-child {
+  margin-bottom: 0;
+}
+
+/* ============================================================================
    Graph panel
    ========================================================================== */
 
