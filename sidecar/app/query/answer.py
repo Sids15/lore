@@ -21,6 +21,7 @@ from app.history.retrieval import CommitHit
 from app.llm import ollama_client
 from app.llm.parsing import parse_json_object
 from app.query import context, router
+from app.query.condense import ConversationTurn, condense_question, format_history
 from app.retrieval.hybrid import RetrievedChunk
 
 _ANSWER_SYSTEM = (
@@ -86,8 +87,15 @@ async def _check_grounding(
     return bool(data.get("grounded", True)), list(data.get("unsupported") or [])
 
 
-async def _generate_answer(question: str, context_text: str, settings: Settings) -> str:
-    prompt = f"Context snippets:\n\n{context_text}\n\nQuestion: {question}\n\nAnswer:"
+def _build_prompt(question: str, context_text: str, conversation: str) -> str:
+    convo = f"Conversation so far:\n{conversation}\n\n" if conversation else ""
+    return f"{convo}Context snippets:\n\n{context_text}\n\nQuestion: {question}\n\nAnswer:"
+
+
+async def _generate_answer(
+    question: str, context_text: str, settings: Settings, *, conversation: str = ""
+) -> str:
+    prompt = _build_prompt(question, context_text, conversation)
     return await ollama_client.generate(
         settings.ollama_url, settings.generation_model, prompt, system=_ANSWER_SYSTEM
     )
@@ -100,6 +108,7 @@ async def _answer_from_bundle(
     settings: Settings,
     *,
     corrected: bool,
+    conversation: str = "",
 ) -> AnswerResponse:
     """Generate + ground an answer from a gathered context bundle."""
     if not bundle.chunks and not bundle.graph_notes and not bundle.commits and not bundle.docs:
@@ -112,7 +121,7 @@ async def _answer_from_bundle(
         )
 
     context_text = context.format_context(bundle)
-    answer = await _generate_answer(question, context_text, settings)
+    answer = await _generate_answer(question, context_text, settings, conversation=conversation)
 
     grounded, unsupported = True, []
     if settings.grounding_enabled:
@@ -136,10 +145,19 @@ async def answer_question(
     *,
     k: int | None = None,
     settings: Settings | None = None,
+    history: list[ConversationTurn] | None = None,
 ) -> AnswerResponse:
-    """Answer a question: route → gather (GraphRAG) → generate → ground → self-correct."""
+    """Answer a question: condense → route → gather → generate → ground → self-correct.
+
+    ``history`` (prior turns) enables follow-ups: it is condensed into a standalone
+    question for routing/retrieval and shown to generation as conversation context.
+    """
     settings = settings or get_settings()
-    route = await router.classify(question, settings)
+    history = history or []
+    # Resolve follow-ups ("explain that") into a standalone retrieval question.
+    retrieval_q = await condense_question(question, history, settings)
+    conversation = format_history(history, settings.conversation_max_turns) if history else ""
+    route = await router.classify(retrieval_q, settings)
 
     if route.trivial:
         answer = await ollama_client.generate(
@@ -149,16 +167,18 @@ async def answer_question(
             answer=answer, sources=[], grounded=True, categories=route.categories
         )
 
-    bundle = await context.gather(question, route, settings, k=k)
+    bundle = await context.gather(retrieval_q, route, settings, k=k)
     had_context = bool(bundle.chunks or bundle.graph_notes or bundle.commits or bundle.docs)
-    result = await _answer_from_bundle(question, bundle, route, settings, corrected=False)
+    result = await _answer_from_bundle(
+        question, bundle, route, settings, corrected=False, conversation=conversation
+    )
 
     # Self-correction: one broaden+retry pass when the answer is weak.
     if settings.self_correct_enabled and (not had_context or not result.grounded):
-        broadened = await context.gather(question, route, settings, k=k, broaden=True)
+        broadened = await context.gather(retrieval_q, route, settings, k=k, broaden=True)
         if broadened.chunks or broadened.graph_notes or broadened.docs:
             retry = await _answer_from_bundle(
-                question, broadened, route, settings, corrected=True
+                question, broadened, route, settings, corrected=True, conversation=conversation
             )
             # Take the retry if we had nothing before, or if it is now grounded.
             if not had_context or retry.grounded:
@@ -198,6 +218,8 @@ async def _stream_and_ground(
     route: "router.RouteDecision",
     settings: Settings,
     result: dict,
+    *,
+    conversation: str = "",
 ) -> AsyncIterator[dict]:
     """Stream meta + answer tokens for one pass, then ground into ``result``.
 
@@ -209,7 +231,7 @@ async def _stream_and_ground(
     yield {"type": "status", "stage": "generating"}
 
     context_text = context.format_context(bundle)
-    prompt = f"Context snippets:\n\n{context_text}\n\nQuestion: {question}\n\nAnswer:"
+    prompt = _build_prompt(question, context_text, conversation)
     parts: list[str] = []
     async for delta in ollama_client.generate_stream(
         settings.ollama_url, settings.generation_model, prompt, system=_ANSWER_SYSTEM
@@ -250,10 +272,17 @@ async def answer_question_stream(
     *,
     k: int | None = None,
     settings: Settings | None = None,
+    history: list[ConversationTurn] | None = None,
 ) -> AsyncIterator[dict]:
-    """Answer a question as a stream of NDJSON events (see protocol above)."""
+    """Answer a question as a stream of NDJSON events (see protocol above).
+
+    ``history`` enables follow-ups (condensed for retrieval, shown to generation).
+    """
     settings = settings or get_settings()
-    route = await router.classify(question, settings)
+    history = history or []
+    retrieval_q = await condense_question(question, history, settings)
+    conversation = format_history(history, settings.conversation_max_turns) if history else ""
+    route = await router.classify(retrieval_q, settings)
 
     # Trivial: no retrieval — stream a short reply directly.
     if route.trivial:
@@ -266,19 +295,21 @@ async def answer_question_stream(
         yield _final(True, [], False)
         return
 
-    bundle = await context.gather(question, route, settings, k=k)
+    bundle = await context.gather(retrieval_q, route, settings, k=k)
     had_context = bool(bundle.chunks or bundle.graph_notes or bundle.commits or bundle.docs)
 
     # Nothing retrieved: try one broaden pass, else emit the canned message.
     if not had_context:
         broadened = (
-            await context.gather(question, route, settings, k=k, broaden=True)
+            await context.gather(retrieval_q, route, settings, k=k, broaden=True)
             if settings.self_correct_enabled
             else None
         )
         if broadened and (broadened.chunks or broadened.graph_notes or broadened.docs):
             res: dict = {}
-            async for event in _stream_and_ground(question, broadened, route, settings, res):
+            async for event in _stream_and_ground(
+                question, broadened, route, settings, res, conversation=conversation
+            ):
                 yield event
             yield _final(res["grounded"], res["unsupported"], True)
             return
@@ -289,17 +320,21 @@ async def answer_question_stream(
 
     # First pass.
     first: dict = {}
-    async for event in _stream_and_ground(question, bundle, route, settings, first):
+    async for event in _stream_and_ground(
+        question, bundle, route, settings, first, conversation=conversation
+    ):
         yield event
 
     # Self-correction: one broaden+retry when the first answer is ungrounded.
     if settings.self_correct_enabled and not first["grounded"]:
-        broadened = await context.gather(question, route, settings, k=k, broaden=True)
+        broadened = await context.gather(retrieval_q, route, settings, k=k, broaden=True)
         if broadened.chunks or broadened.graph_notes or broadened.docs:
             yield {"type": "status", "stage": "refining"}
             yield {"type": "replace"}
             second: dict = {}
-            async for event in _stream_and_ground(question, broadened, route, settings, second):
+            async for event in _stream_and_ground(
+                question, broadened, route, settings, second, conversation=conversation
+            ):
                 yield event
             yield _final(second["grounded"], second["unsupported"], True)
             return

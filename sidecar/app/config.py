@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     router_enabled: bool = True  # LLM classifies each question to route retrieval
     graphrag_enabled: bool = True  # fold graph neighbours/facts into the context
     self_correct_enabled: bool = True  # one broaden+retry pass on weak answers
+
+    # Multi-turn conversation: condense follow-ups into standalone questions and
+    # feed the recent turns into generation so follow-ups ("explain that") work.
+    conversation_enabled: bool = True
+    conversation_max_turns: int = 6  # most-recent turns kept as context
     graph_context_neighbours: int = 8  # max graph facts added to the context
     correction_k_multiplier: int = 2  # how much to widen retrieval on a retry
     # ONNX cross-encoder reranker (via fastembed). Default is a small, fast model

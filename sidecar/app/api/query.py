@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.query.answer import AnswerResponse, answer_question, answer_question_stream
+from app.query.condense import ConversationTurn
 
 router = APIRouter(tags=["query"])
 
@@ -20,6 +21,7 @@ class QueryRequest(BaseModel):
 
     question: str
     k: int | None = None  # override the number of chunks retrieved
+    history: list[ConversationTurn] = []  # prior turns, for follow-up questions
 
 
 @router.post("/query", response_model=AnswerResponse)
@@ -29,7 +31,7 @@ async def query(request: QueryRequest) -> AnswerResponse:
     if not question:
         raise HTTPException(status_code=400, detail="Question must not be empty")
     try:
-        return await answer_question(question, k=request.k)
+        return await answer_question(question, k=request.k, history=request.history)
     except httpx.HTTPError as error:
         raise HTTPException(
             status_code=503,
@@ -51,7 +53,9 @@ async def query_stream(request: QueryRequest) -> StreamingResponse:
 
     async def ndjson() -> AsyncIterator[str]:
         try:
-            async for event in answer_question_stream(question, k=request.k):
+            async for event in answer_question_stream(
+                question, k=request.k, history=request.history
+            ):
                 yield json.dumps(event) + "\n"
         except httpx.HTTPError as error:
             payload = {
