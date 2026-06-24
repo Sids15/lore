@@ -53,7 +53,7 @@ The whole system runs on the developer's machine. There are **no paid dependenci
 | LLM runtime | [Ollama](https://ollama.com) |
 | Generation model | `qwen3:8b` (configurable) |
 | Embeddings | `nomic-embed-text` |
-| Reranker | `bge-reranker-base` (cross-encoder) |
+| Reranker | ONNX cross-encoder via `fastembed` (default `Xenova/ms-marco-MiniLM-L-6-v2`) |
 | Vector store | LanceDB (embedded) |
 | Graph + git store | SQLite (embedded) |
 | Keyword search | Tantivy / BM25 |
@@ -112,6 +112,15 @@ To run the sidecar on its own (useful for backend work):
 cd sidecar && python -m uvicorn app.main:app --reload --port 8765
 # then open http://127.0.0.1:8765/health
 ```
+
+### Running the tests
+
+```bash
+npm run test                                  # frontend: Vitest + React Testing Library
+cd sidecar && python -m pytest -q             # backend: network-free pytest suite
+```
+
+Both suites are run on every push/PR by GitHub Actions (`.github/workflows/ci.yml`).
 
 ---
 
@@ -175,4 +184,17 @@ Feature-complete. Built phase-by-phase per the PRD roadmap:
 - **Docs index** — markdown/text docs split into heading-aware chunks and embedded; a `docs`
   router category answers documentation questions with file/line citations ("Index docs" button).
 - **Evaluation** — a local harness reporting retrieval recall, faithfulness, and answer relevancy.
+- **Streaming answers** — token-by-token responses over an NDJSON stream, with a Stop button and a
+  latency readout.
+- **Incremental indexing** — re-indexing only re-processes files (or commits) that changed and prunes
+  deleted ones; a "Force full re-index" option restores a clean rebuild.
+- **Multi-turn conversation** — follow-up questions are condensed against the prior turns, so
+  "explain that further" works; a "New chat" button resets the thread.
+- **Click-through citations** — cited sources open in an in-app viewer at the exact lines (served by a
+  read-only, path-traversal-guarded endpoint).
+- **Model management** — pull the required Ollama models from inside the app with a progress bar.
+- **Refactoring agent** — surfaces structural problems (cycles, coupling hubs, architecture
+  violations) and proposes a grounded, on-demand LLM fix for each.
 - **Packaging** — PyInstaller-frozen sidecar bundled into the Tauri installer (no Python needed).
+- **Tests & CI** — a network-free pytest suite plus Vitest/RTL frontend tests, run on every push/PR
+  by GitHub Actions.
