@@ -35,6 +35,11 @@
     ],
     "resources": {
       "../sidecar/dist/lore-sidecar": "lore-sidecar"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
     }
   }
 }
