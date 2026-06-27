@@ -14,7 +14,7 @@ function health(reachable: boolean, missing: string[]): HealthResponse {
     service: "Lore",
     version: "0.1.0",
     databases: { sqlite: true, lancedb: true },
-    ollama: { reachable, installed_models: ["m"], missing_models: missing },
+    ollama: { reachable, installed_models: ["m", "n"], missing_models: missing },
   };
 }
 
@@ -23,16 +23,18 @@ afterEach(() => {
 });
 
 describe("StatusPanel", () => {
-  it("shows Ready when everything is healthy", async () => {
+  it("shows healthy segments when everything is up", async () => {
     vi.mocked(fetchHealth).mockResolvedValue(health(true, []));
     render(<StatusPanel />);
-    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(await screen.findByText("sidecar")).toBeInTheDocument();
+    expect(screen.getByText("db ready")).toBeInTheDocument();
+    expect(screen.getByText("Ollama · 2 models")).toBeInTheDocument();
   });
 
-  it("shows Models missing when models are absent", async () => {
+  it("shows missing models", async () => {
     vi.mocked(fetchHealth).mockResolvedValue(health(true, ["qwen3:8b"]));
     render(<StatusPanel />);
-    expect(await screen.findByText("Models missing")).toBeInTheDocument();
+    expect(await screen.findByText("Ollama · 1 missing")).toBeInTheDocument();
   });
 
   it("shows Sidecar offline when the health check fails", async () => {

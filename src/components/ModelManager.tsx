@@ -2,30 +2,25 @@ import { useCallback, useEffect, useState } from "react";
 
 import { fetchHealth, pullModelStream, type HealthResponse } from "../lib/api";
 
-/** Re-check health on this cadence so the banner self-hides once models land. */
 const POLL_INTERVAL_MS = 5000;
 
-interface PullState {
-  status: string;
-  pct: number | null;
-  error?: string;
-}
-
 /**
- * A banner that appears only when the required Ollama models aren't ready. It
- * lets the user pull each missing model from inside the app (with a live
- * progress bar) instead of running `ollama pull` in a terminal. Renders nothing
- * when Ollama is reachable and no models are missing.
+ * The model-setup banner. Appears only when required Ollama models are missing,
+ * and lets the user pull them (with a progress bar) without leaving the app.
  */
 export function ModelManager() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [pulls, setPulls] = useState<Record<string, PullState>>({});
+  const [dismissed, setDismissed] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pct, setPct] = useState(0);
+  const [current, setCurrent] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       setHealth(await fetchHealth());
     } catch {
-      setHealth(null); // sidecar unreachable; StatusPanel surfaces that
+      setHealth(null);
     }
   }, []);
 
@@ -35,86 +30,67 @@ export function ModelManager() {
     return () => window.clearInterval(timer);
   }, [refresh]);
 
-  const pull = useCallback(
-    async (model: string) => {
-      setPulls((p) => ({ ...p, [model]: { status: "starting…", pct: null } }));
-      try {
+  const missing = health?.ollama.missing_models ?? [];
+
+  const pull = useCallback(async () => {
+    setPulling(true);
+    setError(null);
+    setPct(0);
+    try {
+      for (const model of missing) {
+        setCurrent(model.split(":")[0]);
         await pullModelStream(model, {
           onProgress: (e) =>
-            setPulls((p) => ({
-              ...p,
-              [model]: {
-                status: e.status,
-                pct: e.total ? Math.round(((e.completed ?? 0) / e.total) * 100) : null,
-              },
-            })),
-          onError: (detail) =>
-            setPulls((p) => ({ ...p, [model]: { status: "error", pct: null, error: detail } })),
+            setPct(e.total ? Math.round(((e.completed ?? 0) / e.total) * 100) : 0),
+          onError: (detail) => setError(detail),
         });
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : "Pull failed";
-        setPulls((p) => ({ ...p, [model]: { status: "error", pct: null, error: detail } }));
-        return;
       }
-      // Done: drop the local state and re-check health (the row disappears once
-      // the model is installed).
-      setPulls((p) => {
-        const next = { ...p };
-        delete next[model];
-        return next;
-      });
-      void refresh();
-    },
-    [refresh],
-  );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Pull failed");
+    } finally {
+      setPulling(false);
+    }
+  }, [missing, refresh]);
 
-  if (!health) return null;
-  const { ollama } = health;
-  if (ollama.reachable && ollama.missing_models.length === 0) return null;
+  if (!health || missing.length === 0 || dismissed) return null;
 
   return (
-    <div className="models">
-      {!ollama.reachable ? (
-        <p className="models__hint">
-          Ollama isn’t running. Start it, then Lore can pull the models it needs.
-        </p>
+    <div className="banner">
+      <span className="banner__icon" aria-hidden>!</span>
+      <div>
+        <div className="banner__title">Local models required</div>
+        <div className="banner__sub">
+          Lore runs entirely on-device. Pull{" "}
+          {missing.map((m, i) => (
+            <span key={m}>
+              {i > 0 && " + "}
+              <code>{m}</code>
+            </span>
+          ))}{" "}
+          to begin.
+        </div>
+        {error && <div className="banner__sub" style={{ color: "var(--danger)" }}>{error}</div>}
+      </div>
+
+      {pulling ? (
+        <div className="banner__progress">
+          <div className="banner__bar">
+            <div className="banner__bar-fill" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="banner__pct">
+            {pct}% · {current}
+          </span>
+        </div>
       ) : (
-        <>
-          <p className="models__title">Required models missing — pull them to enable answers:</p>
-          <ul className="models__list">
-            {ollama.missing_models.map((model) => {
-              const state = pulls[model];
-              return (
-                <li key={model} className="models__row">
-                  <code className="models__name">{model}</code>
-                  {!state ? (
-                    <button className="models__pull" onClick={() => void pull(model)}>
-                      Pull
-                    </button>
-                  ) : (
-                    <div className="models__progress">
-                      {state.pct !== null && (
-                        <div className="models__bar">
-                          <div className="models__bar-fill" style={{ width: `${state.pct}%` }} />
-                        </div>
-                      )}
-                      <span className="models__status">
-                        {state.error
-                          ? `Error: ${state.error}`
-                          : `${state.status}${state.pct !== null ? ` ${state.pct}%` : ""}`}
-                      </span>
-                      {state.error && (
-                        <button className="models__pull" onClick={() => void pull(model)}>
-                          Retry
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </>
+        <div className="banner__actions">
+          <button className="btn btn--ghost" onClick={() => setDismissed(true)}>
+            Later
+          </button>
+          <button className="btn btn--warn" onClick={() => void pull()}>
+            Pull models
+          </button>
+        </div>
       )}
     </div>
   );

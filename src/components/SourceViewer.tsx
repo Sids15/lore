@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 
 import { fetchSource, type SourceView } from "../lib/api";
 
-/** A cited location to open in the viewer. */
 export interface SourceTarget {
   repo: string;
   path: string;
@@ -11,20 +10,13 @@ export interface SourceTarget {
 }
 
 /**
- * Modal overlay showing the lines around a cited range, with the cited band
- * highlighted. Fetches the window from the sidecar's `/source` endpoint.
+ * The code-viewer modal: shows the file around a cited range with the cited band
+ * highlighted. Opens from any source citation or file chip.
  */
-export function SourceViewer({
-  target,
-  onClose,
-}: {
-  target: SourceTarget;
-  onClose: () => void;
-}) {
+export function SourceViewer({ target, onClose }: { target: SourceTarget; onClose: () => void }) {
   const [view, setView] = useState<SourceView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch the window whenever the target changes.
   useEffect(() => {
     const controller = new AbortController();
     setView(null);
@@ -39,7 +31,6 @@ export function SourceViewer({
     return () => controller.abort();
   }, [target]);
 
-  // Close on Escape.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -49,36 +40,32 @@ export function SourceViewer({
   }, [onClose]);
 
   return (
-    <div className="viewer__overlay" onClick={onClose}>
-      <div className="viewer" onClick={(e) => e.stopPropagation()}>
-        <div className="viewer__head">
-          <span className="viewer__path">
-            {target.path}:{target.start}-{target.end}
-          </span>
-          <button className="viewer__close" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
+    <div className="cv__overlay" onClick={onClose}>
+      <div className="cv" onClick={(e) => e.stopPropagation()}>
+        <div className="cv__bar">
+          <span className="cv__kind">code</span>
+          <span className="cv__path">{target.path}</span>
+          <span className="cv__sub">lines {target.start}–{target.end}</span>
+          <span className="cv__cited">✓ cited band</span>
+          <button className="cv__close" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
-        {error && <p className="viewer__error">{error}</p>}
-        {!view && !error && <p className="viewer__loading">Loading…</p>}
+        {error && <p className="cv__error">{error}</p>}
+        {!view && !error && <p className="cv__loading">Loading…</p>}
 
         {view && (
-          <pre className="viewer__code">
+          <div className="cv__body">
             {view.lines.map((line, i) => {
               const lineNo = view.window_start + i;
               const cited = lineNo >= view.start_line && lineNo <= view.end_line;
               return (
-                <div
-                  key={lineNo}
-                  className={`viewer__line${cited ? " viewer__line--cited" : ""}`}
-                >
-                  <span className="viewer__gutter">{lineNo}</span>
-                  <span className="viewer__text">{line || " "}</span>
+                <div key={lineNo} className={`cv__line${cited ? " cv__line--cited" : ""}`}>
+                  <span className="cv__gutter">{lineNo}</span>
+                  <span className="cv__text">{line || " "}</span>
                 </div>
               );
             })}
-          </pre>
+          </div>
         )}
       </div>
     </div>

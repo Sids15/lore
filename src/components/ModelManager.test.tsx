@@ -10,14 +10,14 @@ vi.mock("../lib/api", () => ({
   pullModelStream: vi.fn(),
 }));
 
-function health(reachable: boolean, missing: string[]): HealthResponse {
+function health(missing: string[]): HealthResponse {
   return {
     status: missing.length ? "degraded" : "ok",
     service: "Lore",
     version: "0.1.0",
     databases: { sqlite: true, lancedb: true },
     ollama: {
-      reachable,
+      reachable: true,
       installed_models: ["nomic-embed-text"],
       missing_models: missing,
     },
@@ -29,35 +29,32 @@ afterEach(() => {
 });
 
 describe("ModelManager", () => {
-  it("renders nothing when Ollama is ready", async () => {
-    vi.mocked(fetchHealth).mockResolvedValue(health(true, []));
+  it("renders nothing when no models are missing", async () => {
+    vi.mocked(fetchHealth).mockResolvedValue(health([]));
     render(<ModelManager />);
     await waitFor(() => expect(fetchHealth).toHaveBeenCalled());
-    expect(screen.queryByText(/required models missing/i)).toBeNull();
-    expect(screen.queryByRole("button", { name: /pull/i })).toBeNull();
+    expect(screen.queryByText("Local models required")).toBeNull();
   });
 
-  it("shows a start-Ollama hint when unreachable", async () => {
-    vi.mocked(fetchHealth).mockResolvedValue(health(false, ["qwen3:8b"]));
+  it("shows the banner with the missing model and a pull action", async () => {
+    vi.mocked(fetchHealth).mockResolvedValue(health(["qwen3:8b"]));
     render(<ModelManager />);
-    expect(await screen.findByText(/pull the models it needs/i)).toBeInTheDocument();
+    expect(await screen.findByText("Local models required")).toBeInTheDocument();
+    expect(screen.getByText("qwen3:8b")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /pull models/i })).toBeInTheDocument();
   });
 
-  it("lets the user pull a missing model", async () => {
-    vi.mocked(fetchHealth).mockResolvedValue(health(true, ["qwen3:8b"]));
-    // Report progress, then stay pending so the progress UI remains visible
-    // (a resolved pull would immediately clear the row and re-check health).
+  it("pulls the missing model with progress", async () => {
+    vi.mocked(fetchHealth).mockResolvedValue(health(["qwen3:8b"]));
     vi.mocked(pullModelStream).mockImplementation((_model, handlers) => {
       handlers.onProgress?.({ status: "downloading", completed: 5, total: 10 });
       return new Promise<void>(() => {});
     });
 
     render(<ModelManager />);
-    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /pull/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /pull models/i }));
 
     expect(pullModelStream).toHaveBeenCalledWith("qwen3:8b", expect.anything());
-    expect(await screen.findByText(/downloading 50%/i)).toBeInTheDocument();
+    expect(await screen.findByText(/50%/)).toBeInTheDocument();
   });
 });

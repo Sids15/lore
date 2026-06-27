@@ -32,10 +32,8 @@ describe("SourceViewer", () => {
     render(<SourceViewer target={TARGET} onClose={() => undefined} />);
 
     const cited = await screen.findByText("second");
-    expect(cited.closest(".viewer__line")).toHaveClass("viewer__line--cited");
-    expect(screen.getByText("first").closest(".viewer__line")).not.toHaveClass(
-      "viewer__line--cited",
-    );
+    expect(cited.closest(".cv__line")).toHaveClass("cv__line--cited");
+    expect(screen.getByText("first").closest(".cv__line")).not.toHaveClass("cv__line--cited");
   });
 
   it("closes on Escape", async () => {

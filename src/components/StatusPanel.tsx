@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { fetchHealth, type HealthResponse } from "../lib/api";
 
-/** Polling interval for the sidecar health check, in milliseconds. */
 const POLL_INTERVAL_MS = 5000;
 
 type SidecarStatus =
@@ -10,31 +9,25 @@ type SidecarStatus =
   | { kind: "connected"; health: HealthResponse }
   | { kind: "disconnected"; message: string };
 
-type Tone = "loading" | "connected" | "degraded" | "disconnected";
-
 /**
- * Compact backend health badge for the header. Polls `/health` and shows a
- * colored dot + short label; the full details (DBs, Ollama, pull commands) are
- * available on hover via the title attribute.
+ * The full-width status bar. Polls `/health` and shows the sidecar, database, and
+ * Ollama state, with the "100% local" affirmation pinned right.
  */
-export function StatusPanel() {
+export function StatusPanel({ repo }: { repo?: string | null }) {
   const [status, setStatus] = useState<SidecarStatus>({ kind: "loading" });
 
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
-
     async function check() {
       try {
         const health = await fetchHealth(controller.signal);
         if (!cancelled) setStatus({ kind: "connected", health });
       } catch (error) {
         if (cancelled || controller.signal.aborted) return;
-        const message = error instanceof Error ? error.message : "Unknown error";
-        setStatus({ kind: "disconnected", message });
+        setStatus({ kind: "disconnected", message: error instanceof Error ? error.message : "error" });
       }
     }
-
     void check();
     const timer = window.setInterval(() => void check(), POLL_INTERVAL_MS);
     return () => {
@@ -45,71 +38,61 @@ export function StatusPanel() {
   }, []);
 
   return (
-    <div className="statusbar__health" title={detail(status)}>
-      <span className={`statusbar__dot statusbar__dot--${tone(status)}`} aria-hidden />
-      <span className="statusbar__label">{label(status)}</span>
-      {status.kind === "connected" && <StatusSegments health={status.health} />}
-    </div>
+    <footer className="status">
+      {repo && (
+        <>
+          <span className="status__seg">
+            <span className="status__sq" aria-hidden />
+            {repo}
+          </span>
+          <span className="status__sep" />
+        </>
+      )}
+      {status.kind === "loading" && (
+        <Seg dot="load" label="Connecting…" />
+      )}
+      {status.kind === "disconnected" && (
+        <Seg dot="bad" label="Sidecar offline" />
+      )}
+      {status.kind === "connected" && <ConnectedSegs health={status.health} />}
+
+      <div className="status__right">
+        <span className="status__lock" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <rect x="3.2" y="7" width="9.6" height="6.4" rx="1.4" />
+            <path d="M5 7V5.4a3 3 0 0 1 6 0V7" />
+          </svg>
+        </span>
+        100% local · no cloud
+      </div>
+    </footer>
   );
 }
 
-function StatusSegments({ health }: { health: HealthResponse }) {
+function ConnectedSegs({ health }: { health: HealthResponse }) {
   const dbReady = health.databases.sqlite && health.databases.lancedb;
-  const ollama = !health.ollama.reachable
-    ? "ollama: off"
-    : health.ollama.missing_models.length > 0
-      ? `ollama: ${health.ollama.missing_models.length} missing`
-      : `ollama: ${health.ollama.installed_models.length} models`;
+  const o = health.ollama;
+  const ollama = !o.reachable
+    ? "Ollama · offline"
+    : o.missing_models.length > 0
+      ? `Ollama · ${o.missing_models.length} missing`
+      : `Ollama · ${o.installed_models.length} models`;
   return (
     <>
-      <span className="statusbar__seg">db: {dbReady ? "ready" : "init"}</span>
-      <span className="statusbar__seg">{ollama}</span>
+      <Seg dot="ok" label="sidecar" />
+      <span className="status__sep" />
+      <Seg dot={dbReady ? "ok" : "warn"} label={dbReady ? "db ready" : "db init"} />
+      <span className="status__sep" />
+      <Seg dot={o.reachable && o.missing_models.length === 0 ? "ok" : "warn"} label={ollama} />
     </>
   );
 }
 
-function _ready(health: HealthResponse): boolean {
-  const dbReady = health.databases.sqlite && health.databases.lancedb;
-  const ollamaReady = health.ollama.reachable && health.ollama.missing_models.length === 0;
-  return dbReady && ollamaReady;
-}
-
-function tone(status: SidecarStatus): Tone {
-  if (status.kind !== "connected") return status.kind;
-  return _ready(status.health) ? "connected" : "degraded";
-}
-
-function label(status: SidecarStatus): string {
-  switch (status.kind) {
-    case "loading":
-      return "Connecting…";
-    case "disconnected":
-      return "Sidecar offline";
-    case "connected": {
-      const h = status.health;
-      if (!h.ollama.reachable) return "Ollama offline";
-      if (h.ollama.missing_models.length > 0) return "Models missing";
-      if (!(h.databases.sqlite && h.databases.lancedb)) return "DBs initializing";
-      return "Ready";
-    }
-  }
-}
-
-function detail(status: SidecarStatus): string {
-  switch (status.kind) {
-    case "loading":
-      return "Connecting to the sidecar…";
-    case "disconnected":
-      return `Sidecar disconnected: ${status.message}`;
-    case "connected": {
-      const h = status.health;
-      const dbs = `DBs: ${h.databases.sqlite && h.databases.lancedb ? "ready" : "initializing"}`;
-      const ollama = !h.ollama.reachable
-        ? "Ollama: not running"
-        : h.ollama.missing_models.length > 0
-          ? `Ollama: pull ${h.ollama.missing_models.join(", ")}`
-          : `Ollama: ready (${h.ollama.installed_models.length} models)`;
-      return `${h.service} v${h.version} · ${dbs} · ${ollama}`;
-    }
-  }
+function Seg({ dot, label }: { dot: "ok" | "warn" | "bad" | "load"; label: ReactNode }) {
+  return (
+    <span className="status__seg">
+      <span className={`status__dot status__dot--${dot}`} aria-hidden />
+      {label}
+    </span>
+  );
 }
