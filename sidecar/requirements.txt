@@ -3,7 +3,7 @@
 # added in the phase that first needs them.
 
 fastapi>=0.115,<1.0
-uvicorn[standard]>=0.32,<1.0
+uvicorn[standard]>=0.49.0,<1.0
 pydantic-settings>=2.6,<3.0
 lancedb>=0.13,<1.0
 httpx>=0.27,<1.0
