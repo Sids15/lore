@@ -22,7 +22,7 @@ pub fn run() {
         .setup(|app| {
             // Start the backend as soon as the app is ready. A failure here is
             // logged but non-fatal: the UI surfaces the disconnected state.
-            if let Err(error) = sidecar::spawn(&app.handle()) {
+            if let Err(error) = sidecar::spawn(app.handle()) {
                 eprintln!("Lore: failed to start sidecar: {error}");
             }
             Ok(())

@@ -115,7 +115,7 @@ async def index_docs(repo_path: Path, *, force: bool = False) -> DocsJob:
                     )
                     records = [
                         DocChunkRecord(vector=vector, **chunk.model_dump())
-                        for chunk, vector in zip(batch, vectors)
+                        for chunk, vector in zip(batch, vectors, strict=False)
                     ]
                     docs_index.upsert(db, records)
                 except (httpx.HTTPError, ValueError) as error:

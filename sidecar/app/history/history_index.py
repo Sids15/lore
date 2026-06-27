@@ -78,7 +78,9 @@ def ensure_fts_index(db: DBConnection, *, force: bool = False) -> None:
         table.create_fts_index(FTS_COLUMN, replace=True)
 
 
-def hybrid_search(db: DBConnection, query_vector: list[float], query_text: str, k: int) -> list[dict]:
+def hybrid_search(
+    db: DBConnection, query_vector: list[float], query_text: str, k: int
+) -> list[dict]:
     if not _exists(db):
         return []
     ensure_fts_index(db)

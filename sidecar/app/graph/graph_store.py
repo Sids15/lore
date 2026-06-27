@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.graph.imports import ImportEdge
 
@@ -80,7 +80,12 @@ def replace_static_graph(
         conn.executemany(
             "INSERT INTO graph_edges (src_key, dst_key, edge_type, layer) VALUES (?, ?, ?, ?)",
             [
-                (_module_key(repo, e.src_file), _module_key(repo, e.dst_file), IMPORT_EDGE, STATIC_LAYER)
+                (
+                    _module_key(repo, e.src_file),
+                    _module_key(repo, e.dst_file),
+                    IMPORT_EDGE,
+                    STATIC_LAYER,
+                )
                 for e in edges
             ],
         )
@@ -162,7 +167,7 @@ def load_static_graph(conn: sqlite3.Connection, repo: str | None = None) -> Grap
 
 def upsert_repo(conn: sqlite3.Connection, name: str, path: str) -> None:
     """Record (or update) the on-disk path of an indexed repository."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with conn:
         conn.execute(
             "INSERT INTO repos (name, path, indexed_at) VALUES (?, ?, ?) "

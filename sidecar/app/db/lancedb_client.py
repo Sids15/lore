@@ -23,7 +23,7 @@ def lancedb_path(data_dir: Path) -> Path:
     return data_dir / LANCEDB_DIRNAME
 
 
-def connect(data_dir: Path) -> "DBConnection":
+def connect(data_dir: Path) -> DBConnection:
     """Open (creating if needed) the LanceDB store under the data directory."""
     path = lancedb_path(data_dir)
     path.mkdir(parents=True, exist_ok=True)

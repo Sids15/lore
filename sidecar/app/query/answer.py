@@ -104,7 +104,7 @@ async def _generate_answer(
 async def _answer_from_bundle(
     question: str,
     bundle: context.RetrievalBundle,
-    route: "router.RouteDecision",
+    route: router.RouteDecision,
     settings: Settings,
     *,
     corrected: bool,
@@ -200,7 +200,7 @@ async def answer_question(
 #   final   -> {grounded, unsupported, corrected}               (terminal)
 
 
-def _meta_event(route: "router.RouteDecision", bundle: context.RetrievalBundle) -> dict:
+def _meta_event(route: router.RouteDecision, bundle: context.RetrievalBundle) -> dict:
     """Build the early `meta` event: tags + sources the UI can show immediately."""
     return {
         "type": "meta",
@@ -215,7 +215,7 @@ def _meta_event(route: "router.RouteDecision", bundle: context.RetrievalBundle) 
 async def _stream_and_ground(
     question: str,
     bundle: context.RetrievalBundle,
-    route: "router.RouteDecision",
+    route: router.RouteDecision,
     settings: Settings,
     result: dict,
     *,
@@ -256,7 +256,7 @@ def _final(grounded: bool, unsupported: list[str], corrected: bool) -> dict:
     }
 
 
-def _empty_meta(route: "router.RouteDecision") -> dict:
+def _empty_meta(route: router.RouteDecision) -> dict:
     return {
         "type": "meta",
         "categories": route.categories,

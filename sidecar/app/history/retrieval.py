@@ -26,7 +26,7 @@ class CommitHit(BaseModel):
     score: float
 
     @classmethod
-    def from_row(cls, row: dict) -> "CommitHit":
+    def from_row(cls, row: dict) -> CommitHit:
         return cls(
             sha=row["sha"],
             author=row["author"],

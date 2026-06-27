@@ -126,10 +126,10 @@ async def index_repo(repo_path: Path, *, force: bool = False) -> IndexJob:
                     )
                     records = [
                         CodeChunkRecord(vector=vector, enriched_text=text, **chunk.model_dump())
-                        for chunk, text, vector in zip(batch, texts, vectors)
+                        for chunk, text, vector in zip(batch, texts, vectors, strict=False)
                     ]
                     code_index.upsert(db, records)
-                    for chunk, enrichment in zip(batch, enrichments):
+                    for chunk, enrichment in zip(batch, enrichments, strict=False):
                         if enrichment.relations is not None:
                             fresh[chunk.chunk_id] = enrichment.relations
                             file_by_chunk[chunk.chunk_id] = chunk.file_path

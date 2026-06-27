@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchHealth, pullModelStream, type HealthResponse } from "../lib/api";
 
@@ -30,7 +30,7 @@ export function ModelManager() {
     return () => window.clearInterval(timer);
   }, [refresh]);
 
-  const missing = health?.ollama.missing_models ?? [];
+  const missing = useMemo(() => health?.ollama.missing_models ?? [], [health]);
 
   const pull = useCallback(async () => {
     setPulling(true);

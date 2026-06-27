@@ -144,7 +144,11 @@ class Settings(BaseSettings):
     @property
     def model_cache_path(self) -> Path:
         """Absolute path where downloaded model files are cached."""
-        base = self.model_cache_dir if self.model_cache_dir is not None else self.data_path / "models"
+        base = (
+            self.model_cache_dir
+            if self.model_cache_dir is not None
+            else self.data_path / "models"
+        )
         return Path(base).expanduser().resolve()
 
 

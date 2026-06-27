@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from app.llm import ollama_client
 
-
 # --- faked httpx streaming client (mirrors test_ollama_stream) -----------------
 
 
@@ -40,7 +39,7 @@ class _FakeClient:
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
 
-    async def __aenter__(self) -> "_FakeClient":
+    async def __aenter__(self) -> _FakeClient:
         return self
 
     async def __aexit__(self, *exc) -> bool:

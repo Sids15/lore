@@ -81,7 +81,9 @@ def _hub_candidates(data: graph_store.GraphData, settings: Settings) -> list[Ref
     return out
 
 
-def _violation_candidates(repo_path: str | None, data: graph_store.GraphData) -> list[RefactorCandidate]:
+def _violation_candidates(
+    repo_path: str | None, data: graph_store.GraphData
+) -> list[RefactorCandidate]:
     if repo_path is None or not Path(repo_path).is_dir():
         return []
     try:

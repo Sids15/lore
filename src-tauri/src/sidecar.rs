@@ -52,7 +52,11 @@ fn python_executable(sidecar_dir: &Path) -> PathBuf {
 /// so the caller falls back to running uvicorn from the venv.
 fn bundled_sidecar(app: &AppHandle) -> Option<PathBuf> {
     let resource_dir = app.path().resource_dir().ok()?;
-    let exe = if cfg!(windows) { "lore-sidecar.exe" } else { "lore-sidecar" };
+    let exe = if cfg!(windows) {
+        "lore-sidecar.exe"
+    } else {
+        "lore-sidecar"
+    };
     // Tauri may place the bundled folder either flat or nested by basename;
     // check both plausible layouts.
     let candidates = [

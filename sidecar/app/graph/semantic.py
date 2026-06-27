@@ -25,7 +25,9 @@ def _clean_name(name: str) -> str:
     return name
 
 
-def _resolve(name: str, from_chunk: CodeChunk, index: dict[str, list[CodeChunk]]) -> CodeChunk | None:
+def _resolve(
+    name: str, from_chunk: CodeChunk, index: dict[str, list[CodeChunk]]
+) -> CodeChunk | None:
     key = _clean_name(name)
     candidates = index.get(key)
     if not candidates:

@@ -11,7 +11,7 @@ Adding a language is a matter of registering its grammar capsule, a
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 import tree_sitter_javascript
@@ -124,7 +124,7 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
 }
 
 
-@lru_cache(maxsize=None)
+@cache
 def get_parser(language: str) -> Parser:
     """Return a cached tree-sitter parser for the given language name."""
     capsule_factory = _LANGUAGE_CAPSULES[language]

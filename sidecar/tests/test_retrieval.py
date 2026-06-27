@@ -11,7 +11,7 @@ import asyncio
 from app.config import Settings
 from app.db import lancedb_client
 from app.index import code_index
-from app.index.code_index import CodeChunkRecord, _EMBEDDING_DIM
+from app.index.code_index import _EMBEDDING_DIM, CodeChunkRecord
 from app.retrieval import hybrid, reranker
 
 

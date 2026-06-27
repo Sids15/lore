@@ -78,7 +78,6 @@ def test_refactor_endpoint_lists_candidates(monkeypatch, tmp_path):
 
     import app.api.refactor as refactor_api
     import app.main as main
-
     from app.db import sqlite_store
 
     sqlite_store.init_schema(tmp_path / "data")

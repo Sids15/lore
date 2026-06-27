@@ -79,7 +79,13 @@ def _body_node(node: Node) -> Node | None:
     if body is not None:
         return body
     for child in node.named_children:
-        if child.type in {"block", "class_body", "declaration_list", "enum_body", "field_declaration_list"}:
+        if child.type in {
+            "block",
+            "class_body",
+            "declaration_list",
+            "enum_body",
+            "field_declaration_list",
+        }:
             return child
     return None
 

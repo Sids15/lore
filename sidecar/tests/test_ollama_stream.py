@@ -63,7 +63,7 @@ class _FakeClient:
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
 
-    async def __aenter__(self) -> "_FakeClient":
+    async def __aenter__(self) -> _FakeClient:
         return self
 
     async def __aexit__(self, *exc) -> bool:

@@ -115,10 +115,10 @@ async def index_history(repo_path: Path, *, force: bool = False) -> HistoryJob:
                             summary=summary,
                             files=",".join(p for p, _ in c.files),
                         )
-                        for c, summary, vector in zip(batch, summaries, vectors)
+                        for c, summary, vector in zip(batch, summaries, vectors, strict=False)
                     ]
                     history_index.upsert(db, records)
-                    for c, summary in zip(batch, summaries):
+                    for c, summary in zip(batch, summaries, strict=False):
                         history_store.set_summary(conn, c.sha, summary)
                 except (httpx.HTTPError, ValueError) as error:
                     _job.errors.append(f"batch failed: {error}")

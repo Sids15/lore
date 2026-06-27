@@ -102,7 +102,7 @@ export function IndexPanel({
       title: "Choose a repository to index",
     });
     if (typeof selected === "string") setPath(selected);
-  }, []);
+  }, [setPath]);
 
   const startCode = useCallback(async () => {
     if (!path) return;

@@ -110,9 +110,16 @@ def _python_imports(root: Node, rel: str, file_set: set[str]) -> set[str]:
                     found.add(hit)
                 # Resolve imported names as submodules (e.g. `from app.db import x`).
                 for name_node in node.named_children:
-                    if name_node is module_node or name_node.type not in ("dotted_name", "aliased_import"):
+                    if name_node is module_node or name_node.type not in (
+                        "dotted_name",
+                        "aliased_import",
+                    ):
                         continue
-                    leaf = name_node if name_node.type == "dotted_name" else name_node.child_by_field_name("name")
+                    leaf = (
+                        name_node
+                        if name_node.type == "dotted_name"
+                        else name_node.child_by_field_name("name")
+                    )
                     if leaf is None:
                         continue
                     sub = _first_existing(
@@ -163,7 +170,11 @@ def _js_imports(root: Node, rel: str, file_set: set[str]) -> set[str]:
             fn = node.child_by_field_name("function")
             if fn is not None and fn.text and fn.text.decode() == "require":
                 args = node.child_by_field_name("arguments")
-                string_arg = next((c for c in args.named_children if c.type == "string"), None) if args else None
+                string_arg = (
+                    next((c for c in args.named_children if c.type == "string"), None)
+                    if args
+                    else None
+                )
                 if string_arg is not None:
                     spec = _string_value(string_arg)
 
@@ -179,7 +190,9 @@ def _string_value(node: Node) -> str:
     return raw.strip("\"'`")
 
 
-def _resolve_relative(src_dir: str, spec: str, extensions: tuple[str, ...], file_set: set[str]) -> str | None:
+def _resolve_relative(
+    src_dir: str, spec: str, extensions: tuple[str, ...], file_set: set[str]
+) -> str | None:
     joined = posixpath.normpath(posixpath.join(src_dir, spec))
     parts = [p for p in joined.split("/") if p not in ("", ".")]
     return _first_existing(_module_candidates(parts, extensions), file_set)

@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 _HASH_CHUNK = 65536  # bytes read per iteration when hashing a file
@@ -80,7 +80,7 @@ def diff_files(
 
 def record_files(conn: sqlite3.Connection, repo: str, hashes: dict[str, str]) -> None:
     """Upsert the current hashes for a repo (after a successful index pass)."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO file_index (repo, file_path, content_hash, indexed_at) "

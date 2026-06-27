@@ -31,7 +31,7 @@ class RetrievedChunk(BaseModel):
     score: float  # RRF relevance score from hybrid search
 
     @classmethod
-    def from_row(cls, row: dict) -> "RetrievedChunk":
+    def from_row(cls, row: dict) -> RetrievedChunk:
         return cls(
             chunk_id=row["chunk_id"],
             repo=row["repo"],

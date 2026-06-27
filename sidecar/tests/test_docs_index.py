@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.db import lancedb_client
 from app.index import docs_index
-from app.index.docs_index import DocChunkRecord, _EMBEDDING_DIM
+from app.index.docs_index import _EMBEDDING_DIM, DocChunkRecord
 
 
 def _record(chunk_id: str, repo: str = "r") -> DocChunkRecord:

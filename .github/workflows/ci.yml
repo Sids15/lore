@@ -14,6 +14,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python-lint:
+    name: Sidecar · ruff
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sidecar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install "ruff>=0.6"
+      - name: Lint
+        run: ruff check .
+
   sidecar:
     name: Sidecar · pytest
     runs-on: ubuntu-latest
@@ -33,7 +49,7 @@ jobs:
         run: python -m pytest -q
 
   frontend:
-    name: Frontend · vitest + build
+    name: Frontend · lint + test + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +59,42 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Run tests
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
         run: npm run test
-      - name: Typecheck + build
+      - name: Build
         run: npm run build
+
+  rust:
+    name: Shell · fmt + clippy + check
+    # Windows is the app's real target and needs no extra system libraries
+    # (Linux would require WebKitGTK to build the Tauri crate).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install frontend deps
+        run: npm ci
+      - name: Build frontend
+        # tauri-build needs the frontend dist to exist for `cargo check`.
+        run: npm run build
+      - name: Set up Rust components
+        run: rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Format check
+        working-directory: src-tauri
+        run: cargo fmt --check
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Check
+        working-directory: src-tauri
+        run: cargo check

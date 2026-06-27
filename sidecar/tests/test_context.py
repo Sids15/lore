@@ -106,7 +106,7 @@ def test_format_context_includes_graph_section():
     assert "a calls b" in text
 
 
-def _doc_hit(heading: str = "Setup") -> "context.DocHit":
+def _doc_hit(heading: str = "Setup") -> context.DocHit:
     return context.DocHit(
         chunk_id="d1",
         repo="r",

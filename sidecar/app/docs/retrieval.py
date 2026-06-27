@@ -27,7 +27,7 @@ class DocHit(BaseModel):
     score: float
 
     @classmethod
-    def from_row(cls, row: dict) -> "DocHit":
+    def from_row(cls, row: dict) -> DocHit:
         return cls(
             chunk_id=row["chunk_id"],
             repo=row.get("repo") or "",
