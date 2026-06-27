@@ -1,0 +1,69 @@
+name: Release
+
+# Build the Windows installers on a version tag (e.g. v0.1.0) and attach them to
+# a draft GitHub Release. `workflow_dispatch` runs the same build for a dry-run
+# (no release is created — the installers are uploaded as run artifacts instead).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create the Release and upload assets
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Package · Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build the Python sidecar (PyInstaller)
+        # Produces sidecar/dist/lore-sidecar/, bundled by tauri.conf.json resources.
+        working-directory: sidecar
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Build app + installers and draft the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Code signing is deferred (needs a paid certificate). When available,
+          # add the cert/secrets here and set the NSIS/WiX signing options.
+        with:
+          # On a tag push: create a draft release named for the tag. On a manual
+          # dispatch (not a tag): build only, no release.
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('Lore {0}', github.ref_name) || '' }}
+          releaseDraft: true
+          prerelease: false
+
+      - name: Upload installers as run artifacts (dry-run / backup)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lore-windows-installers
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: ignore
