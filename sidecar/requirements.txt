@@ -2,7 +2,7 @@
 # Heavier libraries (tree-sitter, tantivy, networkx, gitpython, ragas, ...) are
 # added in the phase that first needs them.
 
-fastapi>=0.115,<1.0
+fastapi>=0.138.1,<1.0
 uvicorn[standard]>=0.32,<1.0
 pydantic-settings>=2.6,<3.0
 lancedb>=0.13,<1.0
