@@ -84,6 +84,14 @@ jobs:
       - name: Build frontend
         # tauri-build needs the frontend dist to exist for `cargo check`.
         run: npm run build
+      - name: Stub the sidecar resource
+        # tauri-build validates bundle.resources at build-script time. The Rust
+        # checks don't need the real PyInstaller output, so a placeholder at the
+        # configured path is enough (the release workflow builds the real binary).
+        shell: bash
+        run: |
+          mkdir -p sidecar/dist/lore-sidecar
+          echo placeholder > sidecar/dist/lore-sidecar/lore-sidecar.exe
       - name: Set up Rust components
         run: rustup component add rustfmt clippy
       - uses: Swatinem/rust-cache@v2
