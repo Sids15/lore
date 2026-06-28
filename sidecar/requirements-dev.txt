@@ -1,6 +1,6 @@
 # Development-only dependencies (tests, linting, packaging). Not shipped with the app.
 -r requirements.txt
 
-pytest>=8.0
-pyinstaller>=6.0
-ruff>=0.6
+pytest>=9.1.1
+pyinstaller>=6.21.0
+ruff>=0.15.20
