@@ -1,4 +1,6 @@
 version: 2
+# Auto-PR only grouped minor/patch updates per ecosystem; major bumps are left
+# for manual handling (they tend to carry breaking changes).
 updates:
   - package-ecosystem: npm
     directory: "/"
@@ -8,6 +10,10 @@ updates:
     groups:
       npm:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pip
     directory: "/sidecar"
@@ -17,6 +23,10 @@ updates:
     groups:
       pip:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: cargo
     directory: "/src-tauri"
@@ -26,6 +36,10 @@ updates:
     groups:
       cargo:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
@@ -35,3 +49,7 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
