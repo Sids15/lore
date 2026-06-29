@@ -89,6 +89,35 @@ def test_code_route_skips_graph(monkeypatch, tmp_path):
     assert bundle.graph_notes == []
 
 
+def test_extra_queries_route_through_multi_retrieve(monkeypatch, tmp_path):
+    data = tmp_path / "data"
+    _seed(data)
+    captured: dict[str, list[str]] = {}
+
+    async def fake_multi(queries, *, k=None, settings=None):
+        captured["queries"] = queries
+        return [_chunk("m.py::a", "a")]
+
+    async def fail_retrieve(*args, **kwargs):
+        raise AssertionError("single-query retrieve should not run when extra_queries given")
+
+    monkeypatch.setattr(context.hybrid, "retrieve_multi", fake_multi)
+    monkeypatch.setattr(context.hybrid, "retrieve", fail_retrieve)
+
+    bundle = asyncio.run(
+        context.gather(
+            "main q",
+            RouteDecision(categories=["code"]),
+            Settings(data_dir=data),
+            broaden=True,
+            extra_queries=["claim one", "  ", "claim two"],
+        )
+    )
+    # The main question leads, blanks are dropped.
+    assert captured["queries"] == ["main q", "claim one", "claim two"]
+    assert len(bundle.chunks) == 1
+
+
 def test_trivial_returns_empty():
     bundle = asyncio.run(
         context.gather("hi", RouteDecision(categories=["trivial"]), Settings())

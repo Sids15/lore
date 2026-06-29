@@ -94,14 +94,26 @@ async def gather(
     *,
     broaden: bool = False,
     k: int | None = None,
+    extra_queries: list[str] | None = None,
 ) -> RetrievalBundle:
-    """Gather code + graph context for a question, per its route."""
+    """Gather code + graph context for a question, per its route.
+
+    ``extra_queries`` (e.g. the grounding pass's unsupported claims on a
+    self-correction retry) are retrieved alongside ``question`` and fused with RRF
+    so evidence for the weak claims is pulled in, not just more of the same.
+    """
     if route.trivial and not broaden:
         return RetrievalBundle(chunks=[])
 
     base_k = k or settings.retrieval_top_k
     effective_k = base_k * (settings.correction_k_multiplier if broaden else 1)
-    chunks = await hybrid.retrieve(question, k=effective_k, settings=settings)
+    queries = [q for q in (extra_queries or []) if q and q.strip()]
+    if queries:
+        chunks = await hybrid.retrieve_multi(
+            [question, *queries], k=effective_k, settings=settings
+        )
+    else:
+        chunks = await hybrid.retrieve(question, k=effective_k, settings=settings)
 
     categories = set(route.categories)
     if broaden:  # a correction pass casts a wider net, incl. the graph and docs
