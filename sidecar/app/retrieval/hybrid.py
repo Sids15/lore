@@ -6,6 +6,9 @@ gather candidates, then reranks them with the cross-encoder and returns the top-
 
 from __future__ import annotations
 
+import asyncio
+
+import httpx
 from pydantic import BaseModel
 
 from app.config import Settings, get_settings
@@ -77,3 +80,58 @@ async def retrieve(
     rerank_texts = [row.get("enriched_text") or row.get("code", "") for row in rows]
     order = reranker.rerank(question, rerank_texts, settings, top_k=top_k)
     return [candidates[i] for i in order]
+
+
+# Reciprocal Rank Fusion constant for merging ranked lists. 60 is the value from
+# the original RRF paper and a common default.
+RRF_K = 60
+
+
+async def retrieve_multi(
+    queries: list[str],
+    *,
+    k: int | None = None,
+    settings: Settings | None = None,
+) -> list[RetrievedChunk]:
+    """Retrieve for several queries and fuse the results with Reciprocal Rank Fusion.
+
+    Used by the self-correction pass: the main question plus the grounding pass's
+    unsupported claims are retrieved separately and merged, so evidence for the
+    weak claims is pulled in rather than just "more of the same". Each query reuses
+    the full :func:`retrieve` pipeline (hybrid search + rerank).
+    """
+    settings = settings or get_settings()
+    top_k = k or settings.retrieval_top_k
+
+    # De-duplicate and drop blank queries (preserve order).
+    unique: list[str] = []
+    for query in queries:
+        query = (query or "").strip()
+        if query and query not in unique:
+            unique.append(query)
+    if not unique:
+        return []
+    if len(unique) == 1:
+        return await retrieve(unique[0], k=top_k, settings=settings)
+
+    async def _safe_retrieve(query: str) -> list[RetrievedChunk]:
+        # A transient failure (e.g. an embed error) drops just this query from the
+        # fusion rather than aborting the whole retry; genuine bugs still propagate.
+        try:
+            return await retrieve(query, k=top_k, settings=settings)
+        except (httpx.HTTPError, ValueError):
+            return []
+
+    ranked_lists = await asyncio.gather(*(_safe_retrieve(query) for query in unique))
+
+    # RRF: a chunk's score is the sum of 1/(RRF_K + rank) across the lists it
+    # appears in; keep the first chunk object seen for each id.
+    scores: dict[str, float] = {}
+    best: dict[str, RetrievedChunk] = {}
+    for ranked in ranked_lists:
+        for rank, chunk in enumerate(ranked):
+            scores[chunk.chunk_id] = scores.get(chunk.chunk_id, 0.0) + 1.0 / (RRF_K + rank)
+            best.setdefault(chunk.chunk_id, chunk)
+
+    fused = sorted(best.values(), key=lambda c: scores[c.chunk_id], reverse=True)
+    return fused[:top_k]
