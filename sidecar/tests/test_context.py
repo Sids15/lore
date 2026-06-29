@@ -104,6 +104,13 @@ def test_extra_queries_route_through_multi_retrieve(monkeypatch, tmp_path):
     monkeypatch.setattr(context.hybrid, "retrieve_multi", fake_multi)
     monkeypatch.setattr(context.hybrid, "retrieve", fail_retrieve)
 
+    # broaden=True widens the route to include docs, so stub the docs search to
+    # keep the test network-free (it would otherwise embed via Ollama).
+    async def fake_search_docs(question, *, k=None, settings=None):
+        return []
+
+    monkeypatch.setattr(context.docs_retrieval, "search_docs", fake_search_docs)
+
     bundle = asyncio.run(
         context.gather(
             "main q",
