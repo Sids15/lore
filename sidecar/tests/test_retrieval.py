@@ -132,6 +132,69 @@ def test_retrieve_multi_single_query_delegates(monkeypatch):
     assert [c.chunk_id for c in results] == ["a"]
 
 
+def _row(cid: str, vector: list[float], score: float) -> dict:
+    return {
+        "chunk_id": cid,
+        "repo": "r",
+        "file_path": f"{cid}.py",
+        "language": "python",
+        "kind": "function",
+        "symbol": cid,
+        "qualified_name": f"{cid}.py::{cid}",
+        "start_line": 1,
+        "end_line": 2,
+        "code": f"def {cid}(): ...",
+        "enriched_text": cid,
+        "vector": vector,
+        "_relevance_score": score,
+    }
+
+
+def test_retrieve_applies_mmr_diversity(monkeypatch):
+    # Two near-identical candidates (a, a2) ranked top, then an orthogonal one (b).
+    # MMR (k=2) should keep a, then prefer the novel b over the near-duplicate a2.
+    settings = Settings(
+        rerank_enabled=False, mmr_enabled=True, mmr_lambda=0.5, retrieval_top_k=2
+    )
+    rows = [
+        _row("a", [1.0, 0.0], 0.9),
+        _row("a2", [1.0, 0.0], 0.8),
+        _row("b", [0.0, 1.0], 0.7),
+    ]
+
+    async def fake_embed(base_url, model, text, **kwargs):
+        return [1.0, 0.0]
+
+    monkeypatch.setattr(hybrid.ollama_client, "embed", fake_embed)
+    monkeypatch.setattr(hybrid.lancedb_client, "connect", lambda path: None)
+    monkeypatch.setattr(hybrid.code_index, "hybrid_search", lambda db, v, t, k: rows)
+
+    results = asyncio.run(hybrid.retrieve("q", settings=settings))
+    assert [c.chunk_id for c in results] == ["a", "b"]
+
+
+def test_retrieve_mmr_disabled_keeps_relevance_order(monkeypatch):
+    # With MMR off, the plain top_k of the relevance order is returned (a, a2).
+    settings = Settings(
+        rerank_enabled=False, mmr_enabled=False, retrieval_top_k=2
+    )
+    rows = [
+        _row("a", [1.0, 0.0], 0.9),
+        _row("a2", [1.0, 0.0], 0.8),
+        _row("b", [0.0, 1.0], 0.7),
+    ]
+
+    async def fake_embed(base_url, model, text, **kwargs):
+        return [1.0, 0.0]
+
+    monkeypatch.setattr(hybrid.ollama_client, "embed", fake_embed)
+    monkeypatch.setattr(hybrid.lancedb_client, "connect", lambda path: None)
+    monkeypatch.setattr(hybrid.code_index, "hybrid_search", lambda db, v, t, k: rows)
+
+    results = asyncio.run(hybrid.retrieve("q", settings=settings))
+    assert [c.chunk_id for c in results] == ["a", "a2"]
+
+
 def test_hybrid_retrieve_finds_keyword_match(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     _seed(data_dir)

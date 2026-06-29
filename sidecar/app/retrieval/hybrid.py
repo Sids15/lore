@@ -15,7 +15,7 @@ from app.config import Settings, get_settings
 from app.db import lancedb_client
 from app.index import code_index
 from app.llm import ollama_client
-from app.retrieval import reranker
+from app.retrieval import mmr, reranker
 
 
 class RetrievedChunk(BaseModel):
@@ -77,8 +77,17 @@ async def retrieve(
 
     candidates = [RetrievedChunk.from_row(row) for row in rows]
     # Rerank against the enriched text (situating header + code) when available.
+    # Ask for the full order so MMR can re-select the top_k from all candidates.
     rerank_texts = [row.get("enriched_text") or row.get("code", "") for row in rows]
-    order = reranker.rerank(question, rerank_texts, settings, top_k=top_k)
+    order = reranker.rerank(question, rerank_texts, settings, top_k=None)
+
+    if settings.mmr_enabled:
+        # Diversify the final selection using the candidate vectors (already in
+        # the rows — no re-embedding). Falls open to the relevance order.
+        vectors = [row.get("vector") for row in rows]
+        order = mmr.select(order, vectors, k=top_k, lambda_=settings.mmr_lambda)
+    else:
+        order = order[:top_k]
     return [candidates[i] for i in order]
 
 

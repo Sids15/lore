@@ -11,6 +11,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,6 +74,12 @@ class Settings(BaseSettings):
     answer_context_k: int = 6  # top chunks included in the LLM answer context
     grounding_enabled: bool = True  # second LLM pass that checks faithfulness
     rerank_enabled: bool = True
+    # MMR diversity: after reranking, re-select the final top_k to balance
+    # relevance with novelty so near-duplicate chunks don't crowd out distinct
+    # evidence. Pure in-process (no LLM/latency cost). lambda weights relevance vs
+    # diversity (1.0 = pure relevance, 0.0 = pure diversity).
+    mmr_enabled: bool = True
+    mmr_lambda: float = Field(default=0.7, ge=0.0, le=1.0)
 
     # --- Agentic query layer (Phase 5) ---
     router_enabled: bool = True  # LLM classifies each question to route retrieval
