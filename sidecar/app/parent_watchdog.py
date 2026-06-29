@@ -17,20 +17,31 @@ from __future__ import annotations
 import os
 import sys
 import threading
+from collections.abc import Callable
+from typing import TextIO
 
 ENABLE_ENV = "LORE_PARENT_WATCHDOG"
 
 
-def _watch_stdin() -> None:
-    """Block on stdin until EOF (parent closed the pipe), then exit hard."""
+def _watch_stdin(
+    stream: TextIO | None = None, *, exit_fn: Callable[[int], None] = os._exit
+) -> None:
+    """Block on ``stream`` until EOF (parent closed the pipe), then exit hard.
+
+    ``stream``/``exit_fn`` default to the real stdin and ``os._exit`` so production
+    behaviour is unchanged; they are injectable purely so the EOF→exit logic can be
+    unit-tested in-process without killing the test runner.
+    """
+    if stream is None:
+        stream = sys.stdin
     try:
-        while sys.stdin.readline() != "":
+        while stream.readline() != "":
             continue
     except (ValueError, OSError):
         # stdin was closed/invalidated — treat as parent gone.
         pass
     # Bypass interpreter shutdown handlers; we want to free the port immediately.
-    os._exit(0)
+    exit_fn(0)
 
 
 def start() -> bool:

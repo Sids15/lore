@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 import subprocess
 import sys
@@ -19,8 +20,24 @@ def test_disabled_when_env_not_set(monkeypatch):
 
 def test_enabled_when_env_set(monkeypatch):
     monkeypatch.setenv(parent_watchdog.ENABLE_ENV, "1")
-    # Provided the process has a real stdin; in pytest this is fine.
+    # No-op the reader so the spawned thread can't read pytest's stdin and call
+    # os._exit on EOF (which would hard-kill the whole test run).
+    monkeypatch.setattr(parent_watchdog, "_watch_stdin", lambda *a, **k: None)
     assert parent_watchdog.start() is True
+
+
+def test_watch_stdin_exits_on_eof():
+    """The reader exits with 0 once the stream reaches EOF (in-process, safe)."""
+    codes: list[int] = []
+
+    # Empty stream → immediate EOF.
+    parent_watchdog._watch_stdin(io.StringIO(""), exit_fn=codes.append)
+    assert codes == [0]
+
+    # Drains existing lines, then exits with 0 at EOF.
+    codes.clear()
+    parent_watchdog._watch_stdin(io.StringIO("line1\nline2\n"), exit_fn=codes.append)
+    assert codes == [0]
 
 
 def test_child_exits_when_stdin_closes():
