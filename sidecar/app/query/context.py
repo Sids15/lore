@@ -18,6 +18,7 @@ from app.docs.retrieval import DocHit
 from app.graph import analysis, graph_store
 from app.history import retrieval as history_retrieval
 from app.history.retrieval import CommitHit
+from app.query import parents
 from app.query.router import RouteDecision
 from app.retrieval import hybrid
 from app.retrieval.hybrid import RetrievedChunk
@@ -33,6 +34,7 @@ class RetrievalBundle(BaseModel):
     graph_used: bool = False
     commits: list[CommitHit] = []
     docs: list[DocHit] = []
+    parent_context: list[str] = []  # enclosing class/imports context (not sources)
 
 
 def _short(name: str) -> str:
@@ -131,12 +133,16 @@ async def gather(
     if "docs" in categories:
         docs = await docs_retrieval.search_docs(question, settings=settings)
 
+    final_chunks = chunks[: settings.answer_context_k]
+    parent_context = parents.expand_parents(final_chunks, settings)
+
     return RetrievalBundle(
-        chunks=chunks[: settings.answer_context_k],
+        chunks=final_chunks,
         graph_notes=notes,
         graph_used=bool(notes),
         commits=commits,
         docs=docs[: settings.answer_context_k],
+        parent_context=parent_context,
     )
 
 
@@ -169,5 +175,8 @@ def format_context(bundle: RetrievalBundle) -> str:
             label = f"{loc} ({doc.heading})" if doc.heading else loc
             blocks.append(f"[{label}]\n{doc.text}")
         sections.append("From the documentation:\n" + "\n\n".join(blocks))
+
+    if bundle.parent_context:
+        sections.append("Enclosing context:\n" + "\n\n".join(bundle.parent_context))
 
     return "\n\n".join(sections)

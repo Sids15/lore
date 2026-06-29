@@ -93,6 +93,24 @@ def search(db: DBConnection, vector: list[float], k: int = 5) -> list[dict]:
     return db.open_table(TABLE_NAME).search(vector).limit(k).to_list()
 
 
+def get_by_qualified_names(db: DBConnection, repo: str, names: list[str]) -> list[dict]:
+    """Fetch chunks for a repo by exact qualified_name (metadata-only filter).
+
+    Used by parent-chunk expansion to pull a method's enclosing class and a
+    file's module/imports chunk. Returns [] for no names or a missing table.
+    """
+    if not names or not _table_exists(db):
+        return []
+    table = db.open_table(TABLE_NAME)
+    quoted = ", ".join(f"'{_quote(name)}'" for name in names)
+    return (
+        table.search()
+        .where(f"repo = '{_quote(repo)}' AND qualified_name IN ({quoted})")
+        .limit(len(names))
+        .to_list()
+    )
+
+
 def _has_fts_index(table, column: str) -> bool:
     return any(column in (idx.columns or []) for idx in table.list_indices())
 

@@ -191,6 +191,27 @@ def test_semantic_graph_preserved_on_noop_reindex(tmp_path, monkeypatch):
     assert set(after.edges) == set(before.edges)
 
 
+def test_get_by_qualified_names_filters(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _write_repo(repo)
+    data_dir = tmp_path / "data"
+    _patch_embeds(monkeypatch, Settings(data_dir=data_dir, enrich_enabled=False), [])
+
+    asyncio.run(pipeline.index_repo(repo))
+    db = lancedb_client.connect(data_dir)
+
+    rows = code_index.get_by_qualified_names(
+        db, "repo", ["pkg/a.py::Calc", "b.py::<module>", "missing::x"]
+    )
+    names = {r["qualified_name"] for r in rows}
+    assert names == {"pkg/a.py::Calc", "b.py::<module>"}
+
+    # Wrong repo -> no rows; empty names -> no rows.
+    assert code_index.get_by_qualified_names(db, "other", ["pkg/a.py::Calc"]) == []
+    assert code_index.get_by_qualified_names(db, "repo", []) == []
+
+
 def test_get_settings_singleton_unaffected():
     # Sanity: the real settings singleton still resolves (default data dir).
     assert isinstance(get_settings(), Settings)

@@ -125,6 +125,32 @@ def test_extra_queries_route_through_multi_retrieve(monkeypatch, tmp_path):
     assert len(bundle.chunks) == 1
 
 
+def test_gather_populates_parent_context(monkeypatch, tmp_path):
+    data = tmp_path / "data"
+    _seed(data)
+    _patch_retrieve(monkeypatch, [_chunk("m.py::C.foo", "foo")])
+
+    def fake_expand(chunks, settings):
+        return ["[m.py:1 (imports)]\nimport os"]
+
+    monkeypatch.setattr(context.parents, "expand_parents", fake_expand)
+
+    bundle = asyncio.run(
+        context.gather("what is foo?", RouteDecision(categories=["code"]), Settings(data_dir=data))
+    )
+    assert bundle.parent_context == ["[m.py:1 (imports)]\nimport os"]
+
+
+def test_format_context_includes_enclosing_section():
+    bundle = context.RetrievalBundle(
+        chunks=[_chunk("m.py::a", "a")],
+        parent_context=["[m.py:1 (enclosing class C)]\nclass C:"],
+    )
+    text = context.format_context(bundle)
+    assert "Enclosing context:" in text
+    assert "enclosing class C" in text
+
+
 def test_trivial_returns_empty():
     bundle = asyncio.run(
         context.gather("hi", RouteDecision(categories=["trivial"]), Settings())

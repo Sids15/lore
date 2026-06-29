@@ -80,6 +80,13 @@ class Settings(BaseSettings):
     # diversity (1.0 = pure relevance, 0.0 = pure diversity).
     mmr_enabled: bool = True
     mmr_lambda: float = Field(default=0.7, ge=0.0, le=1.0)
+    # Parent-chunk expansion: after retrieval, attach each chunk's enclosing
+    # context (a method's class header + the file's imports/module chunk) as extra
+    # prompt context. Pure LanceDB lookups (no LLM/re-embed). Char-budgeted so it
+    # can't bloat the prompt; not added to sources/citations.
+    parent_expansion_enabled: bool = True
+    parent_header_max_lines: int = Field(default=12, ge=1)
+    parent_context_max_chars: int = Field(default=1500, ge=0)
 
     # --- Agentic query layer (Phase 5) ---
     router_enabled: bool = True  # LLM classifies each question to route retrieval
