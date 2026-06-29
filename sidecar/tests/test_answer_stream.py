@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
+import httpx
+
 from app.config import Settings
 from app.query import answer
 from app.query.context import RetrievalBundle
@@ -28,7 +30,7 @@ def _chunk(symbol: str) -> RetrievedChunk:
 
 
 def _patch_gather(monkeypatch, bundle_factory):
-    async def fake_gather(question, route, settings, *, broaden=False, k=None):
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
         return bundle_factory(broaden)
 
     monkeypatch.setattr(answer.context, "gather", fake_gather)
@@ -146,3 +148,24 @@ def test_stream_self_corrects_when_ungrounded(monkeypatch):
     assert final["type"] == "final"
     assert final["corrected"] is True
     assert final["grounded"] is True
+
+
+def test_stream_self_correction_failure_falls_back(monkeypatch):
+    """If the correction re-retrieval fails, fall through to the first-pass final."""
+
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
+        if broaden:
+            raise httpx.HTTPError("embed down")
+        return RetrievalBundle(chunks=[_chunk("a")])
+
+    monkeypatch.setattr(answer.context, "gather", fake_gather)
+    _patch_stream(monkeypatch, ["draft"])
+    _patch_grounding(monkeypatch, '{"grounded": false, "unsupported": ["x"]}')
+
+    events = _collect("q", Settings(router_enabled=False, self_correct_enabled=True))
+
+    assert not any(e["type"] == "replace" for e in events)  # correction never started
+    final = events[-1]
+    assert final["type"] == "final"
+    assert final["corrected"] is False
+    assert final["grounded"] is False

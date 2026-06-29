@@ -173,16 +173,25 @@ async def answer_question(
         question, bundle, route, settings, corrected=False, conversation=conversation
     )
 
-    # Self-correction: one broaden+retry pass when the answer is weak.
+    # Self-correction: one broaden+retry pass when the answer is weak. The retry
+    # re-retrieves using the grounding pass's unsupported claims as extra queries.
+    # Best-effort: any failure here keeps the first-pass result rather than failing
+    # the whole request.
     if settings.self_correct_enabled and (not had_context or not result.grounded):
-        broadened = await context.gather(retrieval_q, route, settings, k=k, broaden=True)
-        if broadened.chunks or broadened.graph_notes or broadened.docs:
-            retry = await _answer_from_bundle(
-                question, broadened, route, settings, corrected=True, conversation=conversation
+        try:
+            claims = result.unsupported[: settings.correction_max_claims]
+            broadened = await context.gather(
+                retrieval_q, route, settings, k=k, broaden=True, extra_queries=claims
             )
-            # Take the retry if we had nothing before, or if it is now grounded.
-            if not had_context or retry.grounded:
-                result = retry
+            if broadened.chunks or broadened.graph_notes or broadened.docs:
+                retry = await _answer_from_bundle(
+                    question, broadened, route, settings, corrected=True, conversation=conversation
+                )
+                # Take the retry if we had nothing before, or if it is now grounded.
+                if not had_context or retry.grounded:
+                    result = retry
+        except (httpx.HTTPError, ValueError):
+            pass  # keep the first-pass result
 
     return result
 
@@ -325,10 +334,18 @@ async def answer_question_stream(
     ):
         yield event
 
-    # Self-correction: one broaden+retry when the first answer is ungrounded.
+    # Self-correction: one broaden+retry when the first answer is ungrounded. The
+    # retry re-retrieves using the grounding pass's unsupported claims as extra queries.
+    # Best-effort: if re-retrieval fails, fall through to the first-pass final.
     if settings.self_correct_enabled and not first["grounded"]:
-        broadened = await context.gather(retrieval_q, route, settings, k=k, broaden=True)
-        if broadened.chunks or broadened.graph_notes or broadened.docs:
+        try:
+            claims = first["unsupported"][: settings.correction_max_claims]
+            broadened = await context.gather(
+                retrieval_q, route, settings, k=k, broaden=True, extra_queries=claims
+            )
+        except (httpx.HTTPError, ValueError):
+            broadened = None
+        if broadened and (broadened.chunks or broadened.graph_notes or broadened.docs):
             yield {"type": "status", "stage": "refining"}
             yield {"type": "replace"}
             second: dict = {}

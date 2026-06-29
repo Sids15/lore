@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
+import httpx
+
 from app.config import Settings
 from app.query import answer
 from app.query.context import RetrievalBundle
@@ -32,7 +34,7 @@ def _settings() -> Settings:
 
 
 def _patch_gather(monkeypatch, chunks, *, graph_notes=None, graph_used=False):
-    async def fake_gather(question, route, settings, *, broaden=False, k=None):
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
         return RetrievalBundle(
             chunks=chunks, graph_notes=graph_notes or [], graph_used=graph_used
         )
@@ -89,7 +91,7 @@ def test_ungrounded_answer_is_flagged(monkeypatch):
 
 
 def test_self_correction_retries_when_ungrounded(monkeypatch):
-    async def fake_gather(question, route, settings, *, broaden=False, k=None):
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
         # The broadened (retry) pass adds graph context.
         notes = ["x calls y"] if broaden else []
         return RetrievalBundle(chunks=[_chunk("a")], graph_notes=notes, graph_used=broaden)
@@ -115,6 +117,63 @@ def test_self_correction_retries_when_ungrounded(monkeypatch):
     assert resp.corrected is True
     assert resp.grounded is True
     assert resp.graph_used is True  # the broadened retry pulled in graph context
+
+
+def test_self_correction_forwards_unsupported_claims(monkeypatch):
+    """The retry re-retrieves using the grounding pass's unsupported claims."""
+    seen: dict[str, list[str] | None] = {}
+
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
+        if broaden:
+            seen["extra"] = extra_queries
+        return RetrievalBundle(chunks=[_chunk("a")])
+
+    monkeypatch.setattr(answer.context, "gather", fake_gather)
+
+    state = {"answers": 0}
+
+    async def fake_generate(base_url, model, prompt, *, system=None, **kwargs):
+        if system and "verify" in system.lower():
+            if state["answers"] >= 2:
+                return '{"grounded": true}'
+            return '{"grounded": false, "unsupported": ["claim x", "claim y"]}'
+        state["answers"] += 1
+        return f"answer {state['answers']}"
+
+    monkeypatch.setattr(answer.ollama_client, "generate", fake_generate)
+
+    resp = asyncio.run(
+        answer.answer_question(
+            "q", settings=Settings(router_enabled=False, self_correct_enabled=True)
+        )
+    )
+    assert resp.corrected is True
+    assert seen["extra"] == ["claim x", "claim y"]
+
+
+def test_self_correction_failure_keeps_first_pass(monkeypatch):
+    """A failed correction retrieval falls back to the first-pass answer, not an error."""
+
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
+        if broaden:
+            raise httpx.HTTPError("embed down")
+        return RetrievalBundle(chunks=[_chunk("a")])
+
+    monkeypatch.setattr(answer.context, "gather", fake_gather)
+    _patch_generate(
+        monkeypatch,
+        answer_text="first pass answer",
+        grounding_json='{"grounded": false, "unsupported": ["x"]}',
+    )
+
+    resp = asyncio.run(
+        answer.answer_question(
+            "q", settings=Settings(router_enabled=False, self_correct_enabled=True)
+        )
+    )
+    assert resp.answer == "first pass answer"
+    assert resp.grounded is False
+    assert resp.corrected is False
 
 
 def test_no_retry_when_already_grounded(monkeypatch):

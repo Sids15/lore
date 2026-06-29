@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     conversation_max_turns: int = 6  # most-recent turns kept as context
     graph_context_neighbours: int = 8  # max graph facts added to the context
     correction_k_multiplier: int = 2  # how much to widen retrieval on a retry
+    # On a self-correction retry, re-retrieve using the grounding pass's unsupported
+    # claims as extra queries (RRF-fused). Cap how many claims become queries.
+    correction_max_claims: int = 3
     # ONNX cross-encoder reranker (via fastembed). Default is a small, fast model
     # that loads comfortably alongside the LLM; set LORE_RERANK_MODEL to a larger
     # one (e.g. "BAAI/bge-reranker-base") if you have the RAM for higher quality.
