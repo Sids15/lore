@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     # On a self-correction retry, re-retrieve using the grounding pass's unsupported
     # claims as extra queries (RRF-fused). Cap how many claims become queries.
     correction_max_claims: int = 3
+    # Query expansion: before the first retrieval, generate alternate phrasings and
+    # RRF-fuse their results with the original. Off by default (adds one LLM call +
+    # N retrievals per question); enable with LORE_QUERY_EXPANSION_ENABLED=true.
+    query_expansion_enabled: bool = False
+    query_expansion_n: int = 3  # max alternate phrasings to retrieve
     # ONNX cross-encoder reranker (via fastembed). Default is a small, fast model
     # that loads comfortably alongside the LLM; set LORE_RERANK_MODEL to a larger
     # one (e.g. "BAAI/bge-reranker-base") if you have the RAM for higher quality.

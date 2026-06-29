@@ -88,7 +88,7 @@ def test_history_drives_retrieval_on_standalone_question(monkeypatch):
     captured: dict = {}
     prompts: list[tuple[str | None, str]] = []
 
-    async def fake_gather(question, route, settings, *, broaden=False, k=None):
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
         captured["q"] = question
         return RetrievalBundle(chunks=[_chunk("retry")])
 
@@ -123,7 +123,7 @@ def test_history_drives_retrieval_on_standalone_question(monkeypatch):
 def test_no_history_skips_condense(monkeypatch):
     captured: dict = {}
 
-    async def fake_gather(question, route, settings, *, broaden=False, k=None):
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
         captured["q"] = question
         return RetrievalBundle(chunks=[_chunk("a")])
 

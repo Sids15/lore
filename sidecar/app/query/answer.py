@@ -22,6 +22,7 @@ from app.llm import ollama_client
 from app.llm.parsing import parse_json_object
 from app.query import context, router
 from app.query.condense import ConversationTurn, condense_question, format_history
+from app.query.expand import expand_query
 from app.retrieval.hybrid import RetrievedChunk
 
 _ANSWER_SYSTEM = (
@@ -167,7 +168,8 @@ async def answer_question(
             answer=answer, sources=[], grounded=True, categories=route.categories
         )
 
-    bundle = await context.gather(retrieval_q, route, settings, k=k)
+    expansions = await expand_query(retrieval_q, settings)
+    bundle = await context.gather(retrieval_q, route, settings, k=k, extra_queries=expansions)
     had_context = bool(bundle.chunks or bundle.graph_notes or bundle.commits or bundle.docs)
     result = await _answer_from_bundle(
         question, bundle, route, settings, corrected=False, conversation=conversation
@@ -304,7 +306,8 @@ async def answer_question_stream(
         yield _final(True, [], False)
         return
 
-    bundle = await context.gather(retrieval_q, route, settings, k=k)
+    expansions = await expand_query(retrieval_q, settings)
+    bundle = await context.gather(retrieval_q, route, settings, k=k, extra_queries=expansions)
     had_context = bool(bundle.chunks or bundle.graph_notes or bundle.commits or bundle.docs)
 
     # Nothing retrieved: try one broaden pass, else emit the canned message.

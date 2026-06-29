@@ -119,6 +119,32 @@ def test_self_correction_retries_when_ungrounded(monkeypatch):
     assert resp.graph_used is True  # the broadened retry pulled in graph context
 
 
+def test_query_expansion_forwarded_on_first_pass(monkeypatch):
+    """When enabled, the first-pass gather receives the expansions as extra_queries."""
+    seen: dict[str, list[str] | None] = {}
+
+    async def fake_expand(question, settings):
+        return ["alt phrasing"]
+
+    monkeypatch.setattr(answer, "expand_query", fake_expand)
+
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
+        if not broaden:
+            seen["extra"] = extra_queries
+        return RetrievalBundle(chunks=[_chunk("a")])
+
+    monkeypatch.setattr(answer.context, "gather", fake_gather)
+    _patch_generate(monkeypatch, answer_text="ans", grounding_json='{"grounded": true}')
+
+    resp = asyncio.run(
+        answer.answer_question(
+            "q", settings=Settings(router_enabled=False, query_expansion_enabled=True)
+        )
+    )
+    assert seen["extra"] == ["alt phrasing"]
+    assert resp.grounded is True
+
+
 def test_self_correction_forwards_unsupported_claims(monkeypatch):
     """The retry re-retrieves using the grounding pass's unsupported claims."""
     seen: dict[str, list[str] | None] = {}
