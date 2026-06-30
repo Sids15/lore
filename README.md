@@ -209,9 +209,6 @@ lore/
 ├── sidecar/         # Python FastAPI backend (all RAG / ML logic)
 └── .github/         # CI + release workflows
 ```
-
-See [`CLAUDE.md`](./CLAUDE.md) for the development conventions and a deeper map of the codebase.
-
 ---
 
 ## Features
