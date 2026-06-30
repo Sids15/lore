@@ -524,6 +524,42 @@ export async function suggestRefactor(
   return body.proposal;
 }
 
+// --- Settings (live-editable retrieval/agent knobs) ---------------------------
+
+/** The UI-exposed subset of sidecar settings (mirrors the sidecar SettingsView). */
+export interface AppSettings {
+  rerank_enabled: boolean;
+  mmr_enabled: boolean;
+  mmr_lambda: number;
+  parent_expansion_enabled: boolean;
+  query_expansion_enabled: boolean;
+  query_expansion_n: number;
+  self_correct_enabled: boolean;
+  iterative_enabled: boolean;
+  iterative_max_rounds: number;
+  grounding_enabled: boolean;
+  router_enabled: boolean;
+  graphrag_enabled: boolean;
+  conversation_enabled: boolean;
+  retrieval_top_k: number;
+}
+
+/** Fetch the current effective settings. */
+export async function fetchSettings(signal?: AbortSignal): Promise<AppSettings> {
+  const response = await fetch(`${sidecarBaseUrl}/settings`, { signal });
+  return parseOrThrow<AppSettings>(response, "Fetch settings");
+}
+
+/** Patch one or more settings; returns the new effective settings. */
+export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const response = await fetch(`${sidecarBaseUrl}/settings`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return parseOrThrow<AppSettings>(response, "Update settings");
+}
+
 /** Fetch the lines around a cited range, for the in-app source viewer. */
 export async function fetchSource(
   repo: string,

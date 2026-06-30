@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   askQuestionStream,
   fetchHealth,
+  fetchSettings,
   fetchSource,
   pullModelStream,
   startCodeIndex,
+  updateSettings,
+  type AppSettings,
   type FinalEvent,
   type MetaEvent,
   type PullProgress,
@@ -107,6 +110,46 @@ describe("fetchSource", () => {
     expect(url).toContain("repo=r");
     expect(url).toContain("start=10");
     expect(url).toContain("end=12");
+  });
+});
+
+const SETTINGS: AppSettings = {
+  rerank_enabled: true,
+  mmr_enabled: true,
+  mmr_lambda: 0.7,
+  parent_expansion_enabled: true,
+  query_expansion_enabled: false,
+  query_expansion_n: 3,
+  self_correct_enabled: true,
+  iterative_enabled: false,
+  iterative_max_rounds: 3,
+  grounding_enabled: true,
+  router_enabled: true,
+  graphrag_enabled: true,
+  conversation_enabled: true,
+  retrieval_top_k: 8,
+};
+
+describe("settings", () => {
+  it("fetchSettings GETs the current values", async () => {
+    const fetchMock = mockFetch(jsonResponse(SETTINGS));
+    const s = await fetchSettings();
+    expect(s.mmr_lambda).toBe(0.7);
+    expect(fetchMock.mock.calls[0][0] as string).toContain("/settings");
+  });
+
+  it("updateSettings PATCHes a partial body", async () => {
+    const fetchMock = mockFetch(jsonResponse({ ...SETTINGS, iterative_enabled: true }));
+    const s = await updateSettings({ iterative_enabled: true });
+    expect(s.iterative_enabled).toBe(true);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ iterative_enabled: true });
+  });
+
+  it("updateSettings surfaces a validation error", async () => {
+    mockFetch(jsonResponse({ detail: "bad" }, { ok: false, status: 422 }));
+    await expect(updateSettings({ mmr_lambda: 2 })).rejects.toThrow(/bad/);
   });
 });
 

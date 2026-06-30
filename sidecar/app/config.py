@@ -182,5 +182,13 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return a cached singleton of the resolved settings."""
-    return Settings()
+    """Return a cached singleton of the resolved settings.
+
+    Runtime overrides persisted by the settings API are layered over env/.env
+    (explicit kwargs win in pydantic). The API calls ``get_settings.cache_clear()``
+    after saving, so a change applies to the next request without a restart.
+    """
+    # Local import breaks the config <-> settings_store import cycle.
+    from app.settings_store import load_overrides
+
+    return Settings(**load_overrides())

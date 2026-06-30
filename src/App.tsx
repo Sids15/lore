@@ -6,6 +6,7 @@ import { IndexPanel } from "./components/IndexPanel";
 import { ModelManager } from "./components/ModelManager";
 import { QueryPanel } from "./components/QueryPanel";
 import { RefactorPanel } from "./components/RefactorPanel";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { StatusPanel } from "./components/StatusPanel";
 import loreWordmark from "./assets/lore-wordmark.png";
 import "./App.css";
@@ -17,7 +18,7 @@ function repoNameOf(path: string | null): string | null {
   return parts.length ? parts[parts.length - 1] : path;
 }
 
-type View = "ask" | "index" | "graph" | "eval" | "refactor";
+type View = "ask" | "index" | "graph" | "eval" | "refactor" | "settings";
 type Theme = "dark" | "light";
 
 const NAV: { id: View; label: string; icon: ReactNode }[] = [
@@ -26,6 +27,7 @@ const NAV: { id: View; label: string; icon: ReactNode }[] = [
   { id: "graph", label: "Graph", icon: <IconGraph /> },
   { id: "eval", label: "Eval", icon: <IconChart /> },
   { id: "refactor", label: "Refactor", icon: <IconBranch /> },
+  { id: "settings", label: "Settings", icon: <IconGear /> },
 ];
 
 /**
@@ -93,6 +95,7 @@ function App() {
             <Tab id="graph" view={view}><GraphPanel /></Tab>
             <Tab id="eval" view={view}><EvalPanel /></Tab>
             <Tab id="refactor" view={view}><RefactorPanel /></Tab>
+            <Tab id="settings" view={view}><SettingsPanel /></Tab>
           </div>
         </div>
       </div>
@@ -161,6 +164,14 @@ function IconBranch() {
       <circle cx="5.5" cy="15" r="1.8" />
       <circle cx="14.5" cy="10" r="1.8" />
       <path d="M5.5 6.8v6.4M5.5 10h4.2A3 3 0 0 0 12.7 7" />
+    </Svg>
+  );
+}
+function IconGear() {
+  return (
+    <Svg>
+      <circle cx="10" cy="10" r="2.5" />
+      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" />
     </Svg>
   );
 }

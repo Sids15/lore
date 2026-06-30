@@ -1884,6 +1884,102 @@ button {
   color: var(--danger);
 }
 
+/* ── Settings panel ────────────────────────────────────────────────────────── */
+.set__saved {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--grounded);
+  background: var(--grounded-bg);
+  border-radius: 999px;
+  padding: 4px 12px;
+  animation: setfade 1.6s ease forwards;
+}
+@keyframes setfade {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.set__group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.set__group-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.set__group-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.set__group-note {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.set__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--border);
+}
+.set__group-head + .set__row {
+  border-top: none;
+}
+.set__row-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+.set__row-hint {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.set__row-control {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+.set__slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.set__slider input[type="range"] {
+  width: 140px;
+  accent-color: var(--accent);
+}
+.set__slider-val {
+  font-family: var(--mono, monospace);
+  font-size: 13px;
+  color: var(--text-2);
+  min-width: 34px;
+  text-align: right;
+}
+.set__number {
+  width: 64px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: var(--mono, monospace);
+  color: var(--text);
+  background: var(--inset);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  text-align: right;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

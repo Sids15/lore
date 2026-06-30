@@ -121,7 +121,13 @@ def _aggregate(results: list[EvalQuestionResult]) -> EvalReport:
 async def run_eval(repo_path: Path) -> EvalJob:
     """Run the eval set for a repo and store the report in the job."""
     global _job
-    settings = get_settings()
+    # Eval needs a stable, bounded config regardless of runtime UI overrides:
+    # force the grounding pass on (faithfulness is measured from it) and the
+    # iterative loop off (otherwise a grounded-off + iterative-on UI state would
+    # balloon each ungrounded question into many retrieval/LLM rounds).
+    settings = get_settings().model_copy(
+        update={"grounding_enabled": True, "iterative_enabled": False}
+    )
     _job = EvalJob(state="running", repo=repo_path.name, message="Loading eval set…")
 
     try:
