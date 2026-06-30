@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app import settings_store
 from app.config import Settings, get_settings
@@ -90,3 +91,27 @@ def test_overrides_round_trip(tmp_path, monkeypatch):
     settings_store.save_overrides({"router_enabled": False})
     assert settings_store.load_overrides() == {"router_enabled": False}
     assert Settings(**settings_store.load_overrides()).router_enabled is False
+
+
+def test_save_overrides_is_atomic_and_leaves_no_tmp(tmp_path, monkeypatch):
+    # The atomic write (tmp + os.replace) must not leave a *.tmp sidecar behind.
+    monkeypatch.setattr(settings_store, "_overrides_path", lambda: tmp_path / "settings.json")
+    settings_store.save_overrides({"router_enabled": False})
+    assert (tmp_path / "settings.json").exists()
+    assert not (tmp_path / "settings.json.tmp").exists()
+
+
+def test_merge_overrides_merges_persists_and_returns(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings_store, "_overrides_path", lambda: tmp_path / "settings.json")
+    settings_store.save_overrides({"iterative_enabled": True})
+    merged = settings_store.merge_overrides({"mmr_enabled": False})
+    assert merged == {"iterative_enabled": True, "mmr_enabled": False}
+    assert settings_store.load_overrides() == {"iterative_enabled": True, "mmr_enabled": False}
+
+
+def test_merge_overrides_invalid_raises_and_persists_nothing(tmp_path, monkeypatch):
+    # An out-of-range merged value raises (the API maps it to 422) and writes nothing.
+    monkeypatch.setattr(settings_store, "_overrides_path", lambda: tmp_path / "settings.json")
+    with pytest.raises(ValidationError):
+        settings_store.merge_overrides({"mmr_lambda": 5.0})
+    assert not (tmp_path / "settings.json").exists()

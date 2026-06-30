@@ -10,6 +10,8 @@ API clears the ``get_settings`` cache after saving so the next request rebuilds.
 from __future__ import annotations
 
 import json
+import os
+import threading
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -17,6 +19,11 @@ from pydantic import ValidationError
 from app.config import Settings
 
 _OVERRIDES_FILE = "settings.json"
+
+# Serializes the read-modify-write in merge_overrides. The sidecar is a single
+# process; FastAPI runs sync handlers in a threadpool, so a plain Lock (not a
+# cross-process file lock) is enough to keep concurrent PATCHes from racing.
+_write_lock = threading.Lock()
 
 
 def _overrides_path() -> Path:
@@ -66,7 +73,30 @@ def load_overrides() -> dict:
 
 
 def save_overrides(overrides: dict) -> None:
-    """Persist the overrides dict as JSON, creating the data dir if needed."""
+    """Persist the overrides dict as JSON atomically, creating the data dir if needed.
+
+    Write to a sibling ``*.tmp`` then ``os.replace`` it onto the real path: the swap
+    is atomic on Windows and POSIX (same directory), so a concurrent ``load_overrides``
+    never reads a half-written file, and a crash mid-write can't truncate the original.
+    """
     path = _overrides_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(overrides, indent=2, sort_keys=True), encoding="utf-8")
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(overrides, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def merge_overrides(changes: dict) -> dict:
+    """Atomically merge ``changes`` into the persisted overrides; return the result.
+
+    The whole read-modify-write runs under ``_write_lock`` so two concurrent PATCHes
+    can't both read the same base and clobber each other (lost update). The merged set
+    is validated by constructing :class:`Settings` before persisting — a value that
+    doesn't validate raises ``ValidationError`` (the API maps it to 422) and nothing is
+    written.
+    """
+    with _write_lock:
+        merged = {**load_overrides(), **changes}
+        Settings(**merged)  # validate before persisting; raises ValidationError
+        save_overrides(merged)
+        return merged

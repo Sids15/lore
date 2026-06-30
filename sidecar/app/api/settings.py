@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
 from app.config import Settings, get_settings
-from app.settings_store import load_overrides, save_overrides
+from app.settings_store import merge_overrides
 
 router = APIRouter(tags=["settings"])
 
@@ -74,17 +74,15 @@ def update_settings(patch: SettingsPatch) -> SettingsView:
     """Merge the patch into the persisted overrides and apply it live.
 
     The patch is validated by ``SettingsPatch`` (bad values 422 before we get
-    here); the merged result is validated again by constructing ``Settings`` so a
-    cross-field issue can't be persisted. On success the cache is cleared so the
-    next request rebuilds with the new values.
+    here); ``merge_overrides`` does the read-modify-write under a lock and validates
+    the merged result by constructing ``Settings`` (a cross-field issue can't be
+    persisted) before writing atomically. On success the cache is cleared so the next
+    request rebuilds with the new values.
     """
     changes = patch.model_dump(exclude_none=True)
-    merged = {**load_overrides(), **changes}
-    # Re-validate the whole override set so a cross-field issue can't be persisted.
     try:
-        Settings(**merged)
+        merge_overrides(changes)
     except ValidationError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    save_overrides(merged)
     get_settings.cache_clear()
     return _view(get_settings())
