@@ -56,7 +56,7 @@ function App() {
         <aside className="sb">
           <div className="sb__brand">
             <img className="sb__wordmark" src={loreWordmark} alt="Lore" />
-            <div className="sb__cap">codebase memory · v0.4</div>
+            <div className="sb__cap">codebase memory · v1.0.2</div>
           </div>
 
           <nav className="sb__nav" aria-label="Primary">

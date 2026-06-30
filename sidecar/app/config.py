@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # Service identity.
     app_name: str = "Lore sidecar"
-    version: str = "0.1.0"
+    version: str = "1.0.2"
 
     # HTTP server binding. Defaults to loopback so the sidecar is never exposed
     # off the local machine.
