@@ -2041,16 +2041,55 @@ button {
   min-width: 34px;
   text-align: right;
 }
-.set__number {
-  width: 64px;
-  padding: 6px 8px;
-  font-size: 13px;
-  font-family: var(--mono, monospace);
-  color: var(--text);
+.set__stepper {
+  display: inline-flex;
+  align-items: stretch;
   background: var(--inset);
   border: 1px solid var(--border-2);
-  border-radius: 6px;
-  text-align: right;
+  border-radius: 7px;
+  overflow: hidden;
+}
+.set__step-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.set__step-btn:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.set__step-btn:disabled {
+  color: var(--text-3);
+  opacity: 0.4;
+  cursor: default;
+}
+.set__step-input {
+  width: 38px;
+  padding: 6px 0;
+  border: none;
+  border-left: 1px solid var(--border-2);
+  border-right: 1px solid var(--border-2);
+  background: none;
+  color: var(--text);
+  font-family: var(--mono, monospace);
+  font-size: 13px;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+/* Hide the native spin buttons — the − / + controls replace them. */
+.set__step-input::-webkit-outer-spin-button,
+.set__step-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -52,6 +52,17 @@ describe("SettingsPanel", () => {
     expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
 
+  it("steps a number setting up via the + button", async () => {
+    vi.mocked(fetchSettings).mockResolvedValue(SETTINGS);
+    vi.mocked(updateSettings).mockResolvedValue({ ...SETTINGS, query_expansion_n: 4 });
+
+    render(<SettingsPanel />);
+    const row = (await screen.findByText("Expansion phrasings")).closest(".set__row") as HTMLElement;
+    await userEvent.click(row.querySelector('button[aria-label="Increase"]') as HTMLElement);
+
+    expect(updateSettings).toHaveBeenCalledWith({ query_expansion_n: 4 }); // 3 + step(1)
+  });
+
   it("shows an error and re-fetches authoritative state when saving fails", async () => {
     vi.mocked(fetchSettings).mockResolvedValue(SETTINGS);
     vi.mocked(updateSettings).mockRejectedValue(new Error("HTTP 422"));

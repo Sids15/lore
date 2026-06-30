@@ -267,7 +267,7 @@ export function SettingsPanel() {
                       </div>
                     )}
                     {row.kind === "number" && (
-                      <NumberField
+                      <Stepper
                         value={settings[row.key]}
                         min={row.min}
                         max={row.max}
@@ -351,10 +351,12 @@ function InfoTip({ help, label }: { help: Help; label: string }) {
 }
 
 /**
- * A bounded number input that keeps a local draft while typing (so clearing the
- * field to retype never sticks) and commits a clamped value on blur or Enter.
+ * A bounded numeric stepper: clickable − / + buttons around an editable value.
+ * Friendlier than a raw spinner (no typing required, native arrows hidden) while
+ * still accepting typed input — it keeps a local draft so clearing to retype never
+ * sticks, and commits a clamped (and, for integer steps, rounded) value.
  */
-function NumberField({
+function Stepper({
   value,
   min,
   max,
@@ -370,27 +372,57 @@ function NumberField({
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
 
+  const clamp = (n: number) => {
+    const bounded = Math.min(max, Math.max(min, n));
+    return Number.isInteger(step) ? Math.round(bounded) : bounded; // int knobs reject fractions
+  };
+
   const commit = () => {
     const parsed = Number(draft);
-    let next = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : value;
-    if (Number.isInteger(step)) next = Math.round(next); // int knobs reject fractions
+    const next = Number.isFinite(parsed) ? clamp(parsed) : value;
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  };
+
+  const nudge = (direction: 1 | -1) => {
+    const next = clamp(value + direction * step);
     setDraft(String(next));
     if (next !== value) onCommit(next);
   };
 
   return (
-    <input
-      className="set__number"
-      type="number"
-      min={min}
-      max={max}
-      step={step}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") e.currentTarget.blur();
-      }}
-    />
+    <div className="set__stepper">
+      <button
+        type="button"
+        className="set__step-btn"
+        aria-label="Decrease"
+        onClick={() => nudge(-1)}
+        disabled={value <= min}
+      >
+        −
+      </button>
+      <input
+        className="set__step-input"
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+      />
+      <button
+        type="button"
+        className="set__step-btn"
+        aria-label="Increase"
+        onClick={() => nudge(1)}
+        disabled={value >= max}
+      >
+        +
+      </button>
+    </div>
   );
 }
