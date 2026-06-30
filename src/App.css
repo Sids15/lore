@@ -77,6 +77,9 @@ body,
 #root {
   margin: 0;
   height: 100%;
+  /* The app shell owns all scrolling via its inner regions; the document itself
+     must never scroll, or it adds a second scrollbar beside the panel's own. */
+  overflow: hidden;
 }
 code,
 pre {
@@ -145,7 +148,7 @@ button {
    ========================================================================== */
 
 .app {
-  height: 100vh;
+  height: 100%; /* fill #root (100% of viewport); avoids 100vh scrollbar rounding */
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -164,7 +167,9 @@ button {
 .stage {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  /* Each view owns its own scroller (.ws__body / .ask__scroll / .gr__detail), so
+     the stage must clip — an overflow:auto here adds a second, outer scrollbar. */
+  overflow: hidden;
 }
 .stage__view {
   height: 100%;
