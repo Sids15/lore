@@ -582,6 +582,8 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  /* Fixed height + single-line subtitle keep the header identical on every page. */
+  min-height: 92px;
   padding: 20px 28px 16px;
   border-bottom: 1px solid var(--border);
 }
@@ -596,7 +598,6 @@ button {
   margin: 4px 0 0;
   font-size: 13.5px;
   color: var(--text-2);
-  max-width: 70ch;
 }
 .ws__sub code,
 .ws__title code {
