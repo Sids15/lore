@@ -121,53 +121,72 @@ def test_stream_no_context_returns_fallback(monkeypatch):
     assert events[-1]["grounded"] is True
 
 
-def test_stream_self_corrects_when_ungrounded(monkeypatch):
-    _patch_gather(
-        monkeypatch,
-        lambda broaden: RetrievalBundle(
-            chunks=[_chunk("a")],
-            graph_notes=["x calls y"] if broaden else [],
-            graph_used=broaden,
-        ),
-    )
-    _patch_stream(monkeypatch, ["draft"])
-
-    state = {"checks": 0}
+def _ground_on_check(state, threshold):
+    """A fake `generate`: a grounded/ungrounded verdict on the Nth verify call,
+    a fixed answer otherwise (retries are non-streamed via _answer_from_bundle)."""
 
     async def fake_generate(base_url, model, prompt, *, system=None, **kwargs):
-        state["checks"] += 1
-        # Ground only the second (broadened) pass.
-        return '{"grounded": true}' if state["checks"] >= 2 else '{"grounded": false}'
+        if system and "verify" in system.lower():
+            state["grounds"] += 1
+            return '{"grounded": true}' if state["grounds"] >= threshold else '{"grounded": false}'
+        return "refined answer"
 
-    monkeypatch.setattr(answer.ollama_client, "generate", fake_generate)
+    return fake_generate
+
+
+def test_stream_self_corrects_when_ungrounded(monkeypatch):
+    _patch_gather(monkeypatch, lambda broaden: RetrievalBundle(chunks=[_chunk("a")], graph_used=broaden))
+    _patch_stream(monkeypatch, ["draft"])  # first-pass tokens only
+    # First pass ungrounded; the first correction round grounds (2nd verify call).
+    monkeypatch.setattr(answer.ollama_client, "generate", _ground_on_check({"grounds": 0}, 2))
 
     events = _collect("q", Settings(router_enabled=False, self_correct_enabled=True))
 
-    assert any(e["type"] == "replace" for e in events)
+    # The grounded round is committed: exactly one replace + its answer swapped in.
+    assert sum(1 for e in events if e["type"] == "replace") == 1
+    assert "refined answer" in _tokens(events)
     final = events[-1]
     assert final["type"] == "final"
     assert final["corrected"] is True
     assert final["grounded"] is True
 
 
-def test_stream_iterative_multiple_rounds(monkeypatch):
-    """Iterative mode re-streams across several rounds until grounded."""
+def test_stream_iterative_only_commits_grounded_round(monkeypatch):
+    """Several rounds run, but only the grounded one is committed (one replace)."""
     _patch_gather(
         monkeypatch,
         lambda broaden: RetrievalBundle(
-            chunks=[_chunk("a")],
-            graph_notes=["x calls y"] if broaden else [],
-            graph_used=broaden,
+            chunks=[_chunk("a")], graph_notes=["x calls y"] if broaden else [], graph_used=broaden
         ),
     )
     _patch_stream(monkeypatch, ["draft"])
+    # Ground only on the 3rd verify call (first pass + 2 correction rounds).
+    monkeypatch.setattr(answer.ollama_client, "generate", _ground_on_check({"grounds": 0}, 3))
 
-    state = {"checks": 0}
+    events = _collect(
+        "q",
+        Settings(
+            router_enabled=False, self_correct_enabled=True,
+            iterative_enabled=True, iterative_max_rounds=3,
+        ),
+    )
+
+    # Two rounds ran but only the grounded one commits -> exactly one replace.
+    assert sum(1 for e in events if e["type"] == "replace") == 1
+    final = events[-1]
+    assert final["corrected"] is True
+    assert final["grounded"] is True
+
+
+def test_stream_ungrounded_keeps_first_pass(monkeypatch):
+    """No round grounds -> the first-pass answer stays (matches blocking /query)."""
+    _patch_gather(monkeypatch, lambda broaden: RetrievalBundle(chunks=[_chunk("a")], graph_used=broaden))
+    _patch_stream(monkeypatch, ["first answer"])
 
     async def fake_generate(base_url, model, prompt, *, system=None, **kwargs):
-        state["checks"] += 1
-        # Ground only on the 3rd grounding check (first pass + 2 correction rounds).
-        return '{"grounded": true}' if state["checks"] >= 3 else '{"grounded": false}'
+        if system and "verify" in system.lower():
+            return '{"grounded": false, "unsupported": ["claim"]}'
+        return "discarded retry"  # generated but never committed (never grounds)
 
     monkeypatch.setattr(answer.ollama_client, "generate", fake_generate)
 
@@ -179,10 +198,38 @@ def test_stream_iterative_multiple_rounds(monkeypatch):
         ),
     )
 
-    assert sum(1 for e in events if e["type"] == "replace") == 2  # two correction rounds
+    assert not any(e["type"] == "replace" for e in events)  # nothing committed
+    assert _tokens(events) == "first answer"  # only the first pass is shown
     final = events[-1]
-    assert final["corrected"] is True
-    assert final["grounded"] is True
+    assert final["corrected"] is False
+    assert final["grounded"] is False
+    assert final["unsupported"] == ["claim"]
+
+
+def test_stream_and_blocking_agree_when_ungrounded(monkeypatch):
+    """/query and /query/stream return the same answer/grounded/corrected when
+    no correction round grounds — the whole point of the conservative unification."""
+    _patch_gather(monkeypatch, lambda broaden: RetrievalBundle(chunks=[_chunk("a")], graph_used=broaden))
+    _patch_stream(monkeypatch, ["the answer"])  # first-pass tokens for the stream
+
+    async def fake_generate(base_url, model, prompt, *, system=None, **kwargs):
+        if system and "verify" in system.lower():
+            return '{"grounded": false, "unsupported": ["c"]}'
+        return "the answer"  # blocking first pass + all (discarded) retries
+
+    monkeypatch.setattr(answer.ollama_client, "generate", fake_generate)
+    cfg = Settings(
+        router_enabled=False, self_correct_enabled=True,
+        iterative_enabled=True, iterative_max_rounds=3,
+    )
+
+    blocking = asyncio.run(answer.answer_question("q", settings=cfg))
+    events = _collect("q", cfg)
+    final = events[-1]
+
+    assert _tokens(events) == blocking.answer == "the answer"
+    assert final["grounded"] == blocking.grounded is False
+    assert final["corrected"] == blocking.corrected is False
 
 
 def test_stream_self_correction_failure_falls_back(monkeypatch):

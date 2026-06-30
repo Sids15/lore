@@ -354,38 +354,37 @@ async def answer_question_stream(
         yield event
 
     # Self-correction: re-retrieve using the grounding pass's unsupported claims and
-    # re-stream. Normally one round; with iterative mode on, up to
-    # iterative_max_rounds-1 rounds, each driven by the latest pass's claims.
-    # Best-effort: if a re-retrieval fails, fall through to the latest final.
+    # regenerate. Normally one round; with iterative mode on, up to
+    # iterative_max_rounds-1 rounds, each driven by the latest pass's claims. A
+    # correction is committed (swapping the displayed answer) ONLY if it grounds —
+    # otherwise the first pass stays, matching the conservative blocking path so
+    # /query and /query/stream agree. Best-effort: a failure keeps the first pass.
     if settings.self_correct_enabled and not first["grounded"]:
         max_corrections = (
             settings.iterative_max_rounds - 1 if settings.iterative_enabled else 1
         )
-        current = first
-        corrected = False
+        claims = first["unsupported"]
         for _ in range(max_corrections):
             try:
-                claims = current["unsupported"][: settings.correction_max_claims]
                 broadened = await context.gather(
-                    retrieval_q, route, settings, k=k, broaden=True, extra_queries=claims
+                    retrieval_q, route, settings, k=k, broaden=True,
+                    extra_queries=claims[: settings.correction_max_claims],
+                )
+                if not (broadened.chunks or broadened.graph_notes or broadened.docs):
+                    break  # nothing new to add
+                retry = await _answer_from_bundle(
+                    question, broadened, route, settings, corrected=True, conversation=conversation
                 )
             except (httpx.HTTPError, ValueError):
-                broadened = None
-            if not (broadened and (broadened.chunks or broadened.graph_notes or broadened.docs)):
-                break
-            yield {"type": "status", "stage": "refining"}
-            yield {"type": "replace"}
-            nxt: dict = {}
-            async for event in _stream_and_ground(
-                question, broadened, route, settings, nxt, conversation=conversation
-            ):
-                yield event
-            current = nxt
-            corrected = True
-            if current["grounded"]:
-                break
-        if corrected:
-            yield _final(current["grounded"], current["unsupported"], True)
-            return
+                break  # keep the first pass
+            if retry.grounded:
+                # Commit the grounded improvement: swap the answer + sources.
+                yield {"type": "status", "stage": "refining"}
+                yield {"type": "replace"}
+                yield _meta_event(route, broadened)
+                yield {"type": "token", "text": retry.answer}
+                yield _final(True, retry.unsupported, True)
+                return
+            claims = retry.unsupported  # still ungrounded: drive the next round
 
-    yield _final(first["grounded"], first["unsupported"], False)
+    yield _final(first["grounded"], first["unsupported"], False)  # no round grounded
