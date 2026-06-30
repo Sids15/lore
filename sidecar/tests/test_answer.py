@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 
 import httpx
+import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
 from app.query import answer
@@ -177,6 +179,79 @@ def test_self_correction_forwards_unsupported_claims(monkeypatch):
     assert seen["extra"] == ["claim x", "claim y"]
 
 
+def test_iterative_max_rounds_must_be_at_least_two():
+    with pytest.raises(ValidationError):
+        Settings(iterative_max_rounds=1)
+
+
+def test_iterative_loops_until_grounded(monkeypatch):
+    """With iterative mode on, the loop keeps re-retrieving until grounded."""
+    gathers = {"count": 0}
+
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
+        gathers["count"] += 1
+        return RetrievalBundle(chunks=[_chunk("a")])
+
+    monkeypatch.setattr(answer.context, "gather", fake_gather)
+
+    state = {"answers": 0}
+
+    async def fake_generate(base_url, model, prompt, *, system=None, **kwargs):
+        if system and "verify" in system.lower():
+            # Ground only the 3rd answer (initial + 2 correction rounds).
+            return '{"grounded": true}' if state["answers"] >= 3 else '{"grounded": false}'
+        state["answers"] += 1
+        return f"answer {state['answers']}"
+
+    monkeypatch.setattr(answer.ollama_client, "generate", fake_generate)
+
+    resp = asyncio.run(
+        answer.answer_question(
+            "q",
+            settings=Settings(
+                router_enabled=False, self_correct_enabled=True,
+                iterative_enabled=True, iterative_max_rounds=3,
+            ),
+        )
+    )
+    assert resp.corrected is True
+    assert resp.grounded is True
+    assert gathers["count"] == 3  # initial + 2 correction rounds
+
+
+def test_iterative_stops_early_when_grounded(monkeypatch):
+    """A round that grounds ends the loop before the round budget is spent."""
+    gathers = {"count": 0}
+
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
+        gathers["count"] += 1
+        return RetrievalBundle(chunks=[_chunk("a")])
+
+    monkeypatch.setattr(answer.context, "gather", fake_gather)
+
+    state = {"answers": 0}
+
+    async def fake_generate(base_url, model, prompt, *, system=None, **kwargs):
+        if system and "verify" in system.lower():
+            return '{"grounded": true}' if state["answers"] >= 2 else '{"grounded": false}'
+        state["answers"] += 1
+        return f"answer {state['answers']}"
+
+    monkeypatch.setattr(answer.ollama_client, "generate", fake_generate)
+
+    resp = asyncio.run(
+        answer.answer_question(
+            "q",
+            settings=Settings(
+                router_enabled=False, self_correct_enabled=True,
+                iterative_enabled=True, iterative_max_rounds=4,
+            ),
+        )
+    )
+    assert resp.grounded is True
+    assert gathers["count"] == 2  # initial + 1 correction, then stop (no 3rd/4th)
+
+
 def test_self_correction_failure_keeps_first_pass(monkeypatch):
     """A failed correction retrieval falls back to the first-pass answer, not an error."""
 
@@ -199,6 +274,36 @@ def test_self_correction_failure_keeps_first_pass(monkeypatch):
     )
     assert resp.answer == "first pass answer"
     assert resp.grounded is False
+    assert resp.corrected is False
+
+
+def test_self_correction_generate_error_keeps_first_pass(monkeypatch):
+    """A transient error during the retry *generation* keeps the first-pass answer."""
+
+    async def fake_gather(question, route, settings, *, broaden=False, k=None, extra_queries=None):
+        return RetrievalBundle(chunks=[_chunk("a")])
+
+    monkeypatch.setattr(answer.context, "gather", fake_gather)
+
+    state = {"answers": 0}
+
+    async def fake_generate(base_url, model, prompt, *, system=None, **kwargs):
+        if system and "verify" in system.lower():
+            return '{"grounded": false, "unsupported": ["x"]}'
+        state["answers"] += 1
+        if state["answers"] == 1:
+            return "first pass answer"
+        raise httpx.HTTPError("ollama dropped mid-retry")  # retry generation fails
+
+    monkeypatch.setattr(answer.ollama_client, "generate", fake_generate)
+
+    resp = asyncio.run(
+        answer.answer_question(
+            "q", settings=Settings(router_enabled=False, self_correct_enabled=True)
+        )
+    )
+    # No 500: falls back to the first-pass answer.
+    assert resp.answer == "first pass answer"
     assert resp.corrected is False
 
 

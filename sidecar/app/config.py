@@ -102,6 +102,12 @@ class Settings(BaseSettings):
     # On a self-correction retry, re-retrieve using the grounding pass's unsupported
     # claims as extra queries (RRF-fused). Cap how many claims become queries.
     correction_max_claims: int = 3
+    # Iterative retrieve→reason: turn the one-shot self-correction into a bounded
+    # loop (initial pass + up to iterative_max_rounds-1 correction rounds), each
+    # re-retrieving with the latest answer's unsupported claims. Off by default
+    # (adds retrieve+generate rounds); when off, exactly one correction runs (today).
+    iterative_enabled: bool = False
+    iterative_max_rounds: int = Field(default=3, ge=2, le=6)
     # Query expansion: before the first retrieval, generate alternate phrasings and
     # RRF-fuse their results with the original. Off by default (adds one LLM call +
     # N retrievals per question); enable with LORE_QUERY_EXPANSION_ENABLED=true.

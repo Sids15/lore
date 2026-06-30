@@ -150,6 +150,41 @@ def test_stream_self_corrects_when_ungrounded(monkeypatch):
     assert final["grounded"] is True
 
 
+def test_stream_iterative_multiple_rounds(monkeypatch):
+    """Iterative mode re-streams across several rounds until grounded."""
+    _patch_gather(
+        monkeypatch,
+        lambda broaden: RetrievalBundle(
+            chunks=[_chunk("a")],
+            graph_notes=["x calls y"] if broaden else [],
+            graph_used=broaden,
+        ),
+    )
+    _patch_stream(monkeypatch, ["draft"])
+
+    state = {"checks": 0}
+
+    async def fake_generate(base_url, model, prompt, *, system=None, **kwargs):
+        state["checks"] += 1
+        # Ground only on the 3rd grounding check (first pass + 2 correction rounds).
+        return '{"grounded": true}' if state["checks"] >= 3 else '{"grounded": false}'
+
+    monkeypatch.setattr(answer.ollama_client, "generate", fake_generate)
+
+    events = _collect(
+        "q",
+        Settings(
+            router_enabled=False, self_correct_enabled=True,
+            iterative_enabled=True, iterative_max_rounds=3,
+        ),
+    )
+
+    assert sum(1 for e in events if e["type"] == "replace") == 2  # two correction rounds
+    final = events[-1]
+    assert final["corrected"] is True
+    assert final["grounded"] is True
+
+
 def test_stream_self_correction_failure_falls_back(monkeypatch):
     """If the correction re-retrieval fails, fall through to the first-pass final."""
 

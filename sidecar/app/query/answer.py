@@ -175,25 +175,41 @@ async def answer_question(
         question, bundle, route, settings, corrected=False, conversation=conversation
     )
 
-    # Self-correction: one broaden+retry pass when the answer is weak. The retry
-    # re-retrieves using the grounding pass's unsupported claims as extra queries.
-    # Best-effort: any failure here keeps the first-pass result rather than failing
-    # the whole request.
+    # Self-correction: re-retrieve using the grounding pass's unsupported claims and
+    # regenerate. Normally one round; with iterative mode on, up to
+    # iterative_max_rounds-1 rounds, each driven by the latest answer's claims.
+    # Best-effort: any failure here keeps the current result rather than failing.
     if settings.self_correct_enabled and (not had_context or not result.grounded):
-        try:
-            claims = result.unsupported[: settings.correction_max_claims]
-            broadened = await context.gather(
-                retrieval_q, route, settings, k=k, broaden=True, extra_queries=claims
-            )
-            if broadened.chunks or broadened.graph_notes or broadened.docs:
+        max_corrections = (
+            settings.iterative_max_rounds - 1 if settings.iterative_enabled else 1
+        )
+        # `result` is the answer we'll return (conservatively the first pass);
+        # `claims_source` is whose unsupported claims drive the next retrieval.
+        claims_source = result
+        for _ in range(max_corrections):
+            try:
+                claims = claims_source.unsupported[: settings.correction_max_claims]
+                broadened = await context.gather(
+                    retrieval_q, route, settings, k=k, broaden=True, extra_queries=claims
+                )
+                if not (broadened.chunks or broadened.graph_notes or broadened.docs):
+                    break  # nothing new to add
                 retry = await _answer_from_bundle(
                     question, broadened, route, settings, corrected=True, conversation=conversation
                 )
-                # Take the retry if we had nothing before, or if it is now grounded.
-                if not had_context or retry.grounded:
-                    result = retry
-        except (httpx.HTTPError, ValueError):
-            pass  # keep the first-pass result
+            except (httpx.HTTPError, ValueError):
+                break  # any failure here keeps the current result, not a 500
+            if not had_context:
+                # We had nothing before; any answer beats none. Adopt it and keep
+                # seeking grounding in further rounds.
+                result = retry
+                had_context = True
+            elif retry.grounded:
+                result = retry
+            if retry.grounded:
+                break  # success
+            # Still ungrounded: drive the next round off the retry's fresh claims.
+            claims_source = retry
 
     return result
 
@@ -337,26 +353,39 @@ async def answer_question_stream(
     ):
         yield event
 
-    # Self-correction: one broaden+retry when the first answer is ungrounded. The
-    # retry re-retrieves using the grounding pass's unsupported claims as extra queries.
-    # Best-effort: if re-retrieval fails, fall through to the first-pass final.
+    # Self-correction: re-retrieve using the grounding pass's unsupported claims and
+    # re-stream. Normally one round; with iterative mode on, up to
+    # iterative_max_rounds-1 rounds, each driven by the latest pass's claims.
+    # Best-effort: if a re-retrieval fails, fall through to the latest final.
     if settings.self_correct_enabled and not first["grounded"]:
-        try:
-            claims = first["unsupported"][: settings.correction_max_claims]
-            broadened = await context.gather(
-                retrieval_q, route, settings, k=k, broaden=True, extra_queries=claims
-            )
-        except (httpx.HTTPError, ValueError):
-            broadened = None
-        if broadened and (broadened.chunks or broadened.graph_notes or broadened.docs):
+        max_corrections = (
+            settings.iterative_max_rounds - 1 if settings.iterative_enabled else 1
+        )
+        current = first
+        corrected = False
+        for _ in range(max_corrections):
+            try:
+                claims = current["unsupported"][: settings.correction_max_claims]
+                broadened = await context.gather(
+                    retrieval_q, route, settings, k=k, broaden=True, extra_queries=claims
+                )
+            except (httpx.HTTPError, ValueError):
+                broadened = None
+            if not (broadened and (broadened.chunks or broadened.graph_notes or broadened.docs)):
+                break
             yield {"type": "status", "stage": "refining"}
             yield {"type": "replace"}
-            second: dict = {}
+            nxt: dict = {}
             async for event in _stream_and_ground(
-                question, broadened, route, settings, second, conversation=conversation
+                question, broadened, route, settings, nxt, conversation=conversation
             ):
                 yield event
-            yield _final(second["grounded"], second["unsupported"], True)
+            current = nxt
+            corrected = True
+            if current["grounded"]:
+                break
+        if corrected:
+            yield _final(current["grounded"], current["unsupported"], True)
             return
 
     yield _final(first["grounded"], first["unsupported"], False)
