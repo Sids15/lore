@@ -1944,9 +1944,76 @@ button {
   border-top: none;
 }
 .set__row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   font-weight: 500;
   color: var(--text);
+}
+
+/* ── Plain-language help tooltip (hover / keyboard focus) ── */
+.set__info {
+  position: relative;
+  display: inline-flex;
+}
+.set__info-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-3);
+  cursor: help;
+  transition: color 0.12s ease;
+}
+.set__info-icon {
+  width: 14px;
+  height: 14px;
+}
+.set__info:hover .set__info-btn,
+.set__info-btn:focus-visible {
+  color: var(--accent);
+}
+.set__tip {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 290px;
+  padding: 11px 13px;
+  border: 1px solid var(--border-2);
+  border-radius: 9px;
+  background: var(--surface-3);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  animation: tipIn 0.12s ease;
+}
+@keyframes tipIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.set__tip-what {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+.set__tip-effect {
+  padding-left: 9px;
+  border-left: 2px solid var(--border-2);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
 }
 .set__row-hint {
   font-size: 12.5px;
