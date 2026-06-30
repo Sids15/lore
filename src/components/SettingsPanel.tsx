@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchSettings, updateSettings, type AppSettings } from "../lib/api";
 
@@ -61,6 +61,9 @@ export function SettingsPanel() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number>(0);
+  // Serializes PATCH sends so rapid edits leave in user-action order; the
+  // (serialized) backend then persists them in that order — no out-of-order clobber.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     let cancelled = false;
@@ -72,18 +75,29 @@ export function SettingsPanel() {
     };
   }, []);
 
-  const apply = useCallback(async (patch: Partial<AppSettings>) => {
+  const apply = useCallback((patch: Partial<AppSettings>) => {
     setError(null);
-    const prev = settings;
     setSettings((s) => (s ? { ...s, ...patch } : s)); // optimistic
-    try {
-      setSettings(await updateSettings(patch));
-      setSavedAt(Date.now());
-    } catch (err) {
-      setSettings(prev); // revert on failure
-      setError(err instanceof Error ? err.message : "Failed to save");
-    }
-  }, [settings]);
+    // Chain onto the queue so requests are sent one after another, in order. We
+    // ignore the success body (the optimistic value already equals what was
+    // persisted) to avoid an out-of-order response clobbering a newer edit.
+    queue.current = queue.current
+      .catch(() => {}) // a prior failure must not block later edits
+      .then(async () => {
+        try {
+          await updateSettings(patch);
+          setSavedAt(Date.now());
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to save");
+          // Re-fetch authoritative state to revert correctly (no stale snapshot).
+          try {
+            setSettings(await fetchSettings());
+          } catch {
+            /* keep the optimistic value; the error is already surfaced */
+          }
+        }
+      });
+  }, []);
 
   return (
     <section className="ws">

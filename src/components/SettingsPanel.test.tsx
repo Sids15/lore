@@ -52,7 +52,7 @@ describe("SettingsPanel", () => {
     expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
 
-  it("shows an error and reverts when saving fails", async () => {
+  it("shows an error and re-fetches authoritative state when saving fails", async () => {
     vi.mocked(fetchSettings).mockResolvedValue(SETTINGS);
     vi.mocked(updateSettings).mockRejectedValue(new Error("HTTP 422"));
 
@@ -62,6 +62,9 @@ describe("SettingsPanel", () => {
     await userEvent.click(checkbox);
 
     await waitFor(() => expect(screen.getByText("HTTP 422")).toBeInTheDocument());
-    expect(checkbox.checked).toBe(false); // reverted
+    // The failed save resyncs from the server instead of reverting to a stale snapshot:
+    // mount fetch + error-path re-fetch = 2 calls, and the checkbox reverts to false.
+    await waitFor(() => expect(fetchSettings).toHaveBeenCalledTimes(2));
+    expect(checkbox.checked).toBe(false); // reverted to the authoritative value
   });
 });
