@@ -15,5 +15,5 @@ tree-sitter-rust>=0.23
 fastembed>=0.4
 networkx>=3.0
 pyyaml>=6.0
-pathspec>=0.12
+pathspec>=1.1.1
 gitpython>=3.1
